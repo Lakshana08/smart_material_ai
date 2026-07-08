@@ -1,0 +1,27 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic>=2.13.0
+pydantic-settings==2.7.1
+requests==2.32.3
+cfenv==0.5.3
+openpyxl==3.1.5
+reportlab==4.2.5
+a2a-sdk[http-server]==1.1.0
+python-dotenv==1.0.1
+generative-ai-hub-sdk==4.12.4
+
+# LangChain tool-calling agent stack (app/services/ai_core.py). langchain-aws,
+# langchain-google-vertexai, langchain-community, and aioboto3 are only
+# needed because gen_ai_hub.proxy.langchain eagerly imports all three
+# provider integrations even though this app only uses the OpenAI one.
+langchain==1.3.11
+langchain-core==1.4.8
+langchain-openai==1.3.3
+langchain-community==0.4.2
+langchain-aws==1.6.2
+langchain-google-vertexai==3.2.4
+langgraph==1.2.8
+aioboto3==15.5.0
+
+pytest==8.3.4
+httpx==0.28.1
