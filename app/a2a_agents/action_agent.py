@@ -13,37 +13,82 @@ SKILL = AgentSkill(
     id="perform_material_action",
     name="Perform Material Action",
     description=(
-        "Performs a business action on a material in S/4HANA (e.g. create, "
-        "update, block/unblock). Accepts either structured JSON "
-        "(material_number, action, optional payload) or a plain free-text "
-        "instruction."
+        "Updates material master fields in S/4HANA (T-code MM02) and creates new "
+        "material masters (T-code MM01). Three actions supported: 'update_status' "
+        "(payload.status - the new CrossPlantStatus code), 'update_description' "
+        "(payload.description, optional payload.language, default 'EN'), and "
+        "'create_material' (requires material_number plus payload.product_type, "
+        "payload.industry_sector, payload.base_unit; optional payload.description, "
+        "payload.language, payload.material_group). Accepts either structured JSON "
+        "(material_number, action, payload) or a plain free-text instruction."
     ),
-    tags=["s4hana", "material", "action"],
-    examples=["Block material MAT-1000", "Update the description of material MAT-2000"],
+    tags=["s4hana", "material", "action", "mm01", "mm02"],
+    examples=[
+        "Change the status of material TG20 to Z1",
+        "Update the description of material TG20 to 'Trade Item 20'",
+        "Create a new material TG99, type FERT, industry sector M, base unit EA, description 'New Trade Item'",
+    ],
     input_modes=["application/json", "text/plain"],
     output_modes=["application/json", "text/plain"],
 )
 
 
 @tool
-def perform_action(material_number: str, action: str, reason: str = "") -> dict:
-    """Perform a business action (e.g. block, unblock, update) on a material in S/4HANA."""
-    payload = {"reason": reason} if reason else None
-    return perform_material_action(material_number=material_number, action=action, payload=payload)
+def update_material_status(material_number: str, status: str) -> dict:
+    """Update the cross-plant status (CrossPlantStatus) of a material master record (T-code MM02)."""
+    return perform_material_action(material_number=material_number, action="update_status", payload={"status": status})
 
 
-_TOOLS = [perform_action]
+@tool
+def update_material_description(material_number: str, description: str, language: str = "EN") -> dict:
+    """Update the description of a material master record (T-code MM02). language is a 2-letter SAP language code, defaults to EN."""
+    return perform_material_action(
+        material_number=material_number,
+        action="update_description",
+        payload={"description": description, "language": language},
+    )
 
-_AGENT_SYSTEM_PROMPT = """You perform business actions on materials in S/4HANA using the tool \
-available. Only call the tool if the user's instruction clearly states a material number and an \
-action - never guess or invent values. If either is missing or ambiguous, ask the user to clarify \
-instead of calling the tool. Keep answers short and factual (1-2 sentences)."""
+
+@tool
+def create_material(
+    material_number: str,
+    product_type: str,
+    industry_sector: str,
+    base_unit: str,
+    description: str | None = None,
+    material_group: str | None = None,
+    language: str = "EN",
+) -> dict:
+    """Create a new material master record (T-code MM01). material_number is the
+    external material number to assign. product_type is the SAP material type code
+    (e.g. 'FERT', 'HAWA', 'ROH'). industry_sector is the SAP industry sector code
+    (e.g. 'M', 'C', 'P', 'R'). base_unit is the base unit of measure (e.g. 'EA', 'KG').
+    description and material_group are optional; language is a 2-letter SAP language
+    code for the description, defaults to EN."""
+    payload = {
+        "product_type": product_type,
+        "industry_sector": industry_sector,
+        "base_unit": base_unit,
+        "description": description,
+        "material_group": material_group,
+        "language": language,
+    }
+    return perform_material_action(material_number=material_number, action="create_material", payload=payload)
+
+
+_TOOLS = [update_material_status, update_material_description, create_material]
+
+_AGENT_SYSTEM_PROMPT = """You update material master fields and create new materials in S/4HANA \
+using the tools available. Only call a tool if the user's instruction clearly states all the \
+required values - never guess or invent values (especially product_type, industry_sector, and \
+base_unit for create_material). If anything required is missing or ambiguous, ask the user to \
+clarify instead of calling a tool. Keep answers short and factual (1-2 sentences)."""
 
 
 def build_action_agent_card(base_url: str):
     return build_agent_card(
         name="Material Action Agent",
-        description="Performs business actions on materials in S/4HANA (create/update/trigger processes).",
+        description="Updates material master fields (status, description) in S/4HANA.",
         skill=SKILL,
         base_url=base_url,
     )
@@ -73,6 +118,11 @@ class ActionAgentExecutor(AgentExecutor):
             except S4ClientError as exc:
                 await event_queue.enqueue_event(
                     build_response_message(context, f"Action failed against S/4HANA: {exc}", {"error": "s4_error"})
+                )
+                return
+            except ValueError as exc:
+                await event_queue.enqueue_event(
+                    build_response_message(context, str(exc), {"error": "invalid_action"})
                 )
                 return
 
