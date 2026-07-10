@@ -19,10 +19,32 @@ from app.services.s4_client import get_s4_client
 
 
 def query_material_master(product: str) -> dict:
-    """MM03 - material/product master data."""
-    data = get_s4_client().get(PRODUCT_MASTER.path, params={"$filter": f"Product eq '{product}'"})
+    """MM03 - material/product master data.
+
+    A_Product has no description field of its own (confirmed live,
+    2026-07-08) - descriptions live on the related A_ProductDescription
+    entity (keyed by Product + Language), reached via the to_Description
+    expand and normalized here into a plain "descriptions" list so callers
+    don't need to know about the nested OData shape.
+    """
+    data = get_s4_client().get(
+        PRODUCT_MASTER.path,
+        params={"$filter": f"Product eq '{product}'", "$expand": "to_Description"},
+    )
     rows = extract_rows(data)
+    for row in rows:
+        row["descriptions"] = _clean_nested(row.pop("to_Description", None))
     return {"product": product, "results": rows, "count": len(rows)}
+
+
+def _clean_nested(nested) -> list[dict]:
+    """Normalizes an expanded OData v2 nav property ({"results": [...]})
+    into a plain list with each entry's __metadata/__deferred noise stripped."""
+    if isinstance(nested, dict):
+        nested = nested.get("results", [])
+    if not isinstance(nested, list):
+        return []
+    return [strip_odata_noise(entry) for entry in nested]
 
 
 def query_material_stock(material: str, plant: str | None = None) -> dict:

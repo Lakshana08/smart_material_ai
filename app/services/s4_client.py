@@ -49,7 +49,7 @@ class S4Client:
 
     def _mutate(self, method: str, path: str, json_body: dict | None) -> dict:
         resolved = self._resolve()
-        self._ensure_csrf_token(resolved)
+        self._ensure_csrf_token(resolved, path)
 
         def attempt() -> requests.Response:
             kwargs = self._base_kwargs(resolved)
@@ -61,18 +61,20 @@ class S4Client:
         resp = attempt()
         if resp.status_code == 403 and "csrf" in resp.headers.get("X-CSRF-Token", "").lower():
             self._csrf_token = None
-            self._ensure_csrf_token(resolved)
+            self._ensure_csrf_token(resolved, path)
             resp = attempt()
 
         self._raise_for_odata_error(resp)
         return resp.json() if resp.content else {}
 
-    def _ensure_csrf_token(self, resolved: ResolvedDestination) -> None:
+    def _ensure_csrf_token(self, resolved: ResolvedDestination, path: str) -> None:
         if self._csrf_token:
             return
         kwargs = self._base_kwargs(resolved)
         kwargs["headers"]["X-CSRF-Token"] = "Fetch"
-        resp = requests.get(resolved.url, **kwargs)
+        # Must fetch against the actual service path, not the bare host root -
+        # GETting resolved.url alone 404s since there's no service mounted there.
+        resp = requests.get(self._url(resolved, path), **kwargs)
         resp.raise_for_status()
         self._csrf_token = resp.headers.get("X-CSRF-Token")
         self._csrf_cookies = resp.cookies
