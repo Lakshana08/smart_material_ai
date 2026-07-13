@@ -12,12 +12,16 @@ Two real, confirmed targets (checked live against API_PRODUCT_SRV, 2026-07-08):
   Language='<lang>') - descriptions do NOT live on A_Product itself (it
   only has a to_Description navigation property); this related entity has
   its own composite key (Product + Language) and its own field
-  (ProductDescription).
+  (ProductDescription). Confirmed live (2026-07-13) that most products only
+  carry descriptions for a handful of languages, not every language SAP
+  ships - PATCHing a Product/Language combo that was never maintained 404s
+  since PATCH only updates existing entities, so on a 404 this falls back
+  to POST A_ProductDescription to create that language variant instead.
 
 Both confirmed via live GETs, not guessed. NOT yet confirmed: an actual
-PATCH has never been executed against this system - if the Gateway turns
-out to require If-Match despite no ETag being exposed, add
-headers={"If-Match": "*"} to the mutate call.
+PATCH against an *existing* description has never been executed against
+this system - if the Gateway turns out to require If-Match despite no
+ETag being exposed, add headers={"If-Match": "*"} to the mutate call.
 
 - "create_material" -> POST A_Product, then (if a description was given) a
   second POST A_ProductDescription. Two separate calls, not a deep insert:
@@ -30,7 +34,7 @@ headers={"If-Match": "*"} to the mutate call.
   (omitting Product) are not handled here.
 """
 
-from app.services.s4_client import get_s4_client
+from app.services.s4_client import S4ClientError, get_s4_client
 
 _PRODUCT_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_Product"
 _PRODUCT_DESCRIPTION_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductDescription"
@@ -58,10 +62,20 @@ def perform_material_action(material_number: str, action: str, payload: dict | N
             raise ValueError("update_description requires payload.description (the new text)")
         language = payload.get("language", _DEFAULT_LANGUAGE)
         client = get_s4_client()
-        client.patch(
-            f"{_PRODUCT_DESCRIPTION_PATH}(Product='{material_number}',Language='{language}')",
-            json_body={"ProductDescription": description},
-        )
+        try:
+            client.patch(
+                f"{_PRODUCT_DESCRIPTION_PATH}(Product='{material_number}',Language='{language}')",
+                json_body={"ProductDescription": description},
+            )
+        except S4ClientError as exc:
+            if exc.status_code != 404:
+                raise
+            # No description exists yet for this Product/Language combo -
+            # PATCH only updates existing entities, so create it instead.
+            client.post(
+                _PRODUCT_DESCRIPTION_PATH,
+                json_body={"Product": material_number, "Language": language, "ProductDescription": description},
+            )
         return {
             "status": "ok",
             "material_number": material_number,
