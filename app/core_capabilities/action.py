@@ -28,19 +28,37 @@ headers={"If-Match": "*"} to the mutate call.
   mandatory for creation. Only external material number assignment is
   supported (material_number is required) - internal number ranges
   (omitting Product) are not handled here.
+
+Two more, per SAP Help's "Create/Read/Update/Delete Product Master Data"
+page - documented, NOT yet confirmed live against this system:
+
+- "create_supply_planning" -> POST A_ProductSupplyPlanning. Plant-level MRP
+  data (MRP type/responsible/group, procurement type, lot sizing, safety
+  stock, etc.) for a material that must already exist (create_material
+  first). Separate entity/call, same reasoning as the description split
+  above. Only the commonly-set fields are named parameters; anything else
+  SAP's docs list for this entity can be passed via payload.extra_fields.
+
+- "delete_description" -> DELETE A_ProductDescription(Product='<material>',
+  Language='<lang>'). This is the only delete SAP's docs demonstrate for
+  this API - there's no documented hard-delete for A_Product itself (SAP
+  generally treats material deletion as a status flag, not a real DELETE).
 """
 
 from app.services.s4_client import get_s4_client
 
 _PRODUCT_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_Product"
 _PRODUCT_DESCRIPTION_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductDescription"
+_PRODUCT_SUPPLY_PLANNING_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductSupplyPlanning"
 
 _DEFAULT_LANGUAGE = "EN"
 
 
 def perform_material_action(material_number: str, action: str, payload: dict | None = None) -> dict:
-    """Update material master fields. action is one of "update_status" or
-    "update_description"; payload carries the new value(s).
+    """Create, update, or delete material master fields. action is one of
+    "update_status", "update_description", "create_material",
+    "create_supply_planning", or "delete_description"; payload carries the
+    new value(s).
     """
     payload = payload or {}
 
@@ -110,6 +128,40 @@ def perform_material_action(material_number: str, action: str, payload: dict | N
             "base_unit": base_unit,
         }
 
+    if action == "create_supply_planning":
+        plant = payload.get("plant")
+        if not plant:
+            raise ValueError("create_supply_planning requires payload.plant")
+
+        body: dict = {"Product": material_number, "Plant": plant}
+        field_map = {
+            "mrp_type": "MRPType",
+            "mrp_responsible": "MRPResponsible",
+            "mrp_group": "MRPGroup",
+            "procurement_type": "ProcurementType",
+            "lot_sizing_procedure": "LotSizingProcedure",
+            "availability_check_type": "AvailabilityCheckType",
+            "abc_indicator": "ABCIndicator",
+            "safety_stock_quantity": "SafetyStockQuantity",
+            "planned_delivery_duration_in_days": "PlannedDeliveryDurationInDays",
+        }
+        for payload_key, odata_field in field_map.items():
+            value = payload.get(payload_key)
+            if value is not None:
+                body[odata_field] = value
+        body.update(payload.get("extra_fields") or {})
+
+        client = get_s4_client()
+        client.post(_PRODUCT_SUPPLY_PLANNING_PATH, json_body=body)
+        return {"status": "ok", "material_number": material_number, "action": action, "plant": plant}
+
+    if action == "delete_description":
+        language = payload.get("language", _DEFAULT_LANGUAGE)
+        client = get_s4_client()
+        client.delete(f"{_PRODUCT_DESCRIPTION_PATH}(Product='{material_number}',Language='{language}')")
+        return {"status": "ok", "material_number": material_number, "action": action, "language": language}
+
     raise ValueError(
-        f"Unknown action '{action}', expected 'update_status', 'update_description', or 'create_material'"
+        f"Unknown action '{action}', expected 'update_status', 'update_description', 'create_material', "
+        "'create_supply_planning', or 'delete_description'"
     )

@@ -47,6 +47,9 @@ class S4Client:
     def patch(self, path: str, json_body: dict | None = None) -> dict:
         return self._mutate("PATCH", path, json_body)
 
+    def delete(self, path: str) -> dict:
+        return self._mutate("DELETE", path, None)
+
     def _mutate(self, method: str, path: str, json_body: dict | None) -> dict:
         resolved = self._resolve()
         self._ensure_csrf_token(resolved, path)

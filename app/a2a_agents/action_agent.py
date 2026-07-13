@@ -13,13 +13,17 @@ SKILL = AgentSkill(
     id="perform_material_action",
     name="Perform Material Action",
     description=(
-        "Updates material master fields in S/4HANA (T-code MM02) and creates new "
-        "material masters (T-code MM01). Three actions supported: 'update_status' "
-        "(payload.status - the new CrossPlantStatus code), 'update_description' "
-        "(payload.description, optional payload.language, default 'EN'), and "
-        "'create_material' (requires material_number plus payload.product_type, "
-        "payload.industry_sector, payload.base_unit; optional payload.description, "
-        "payload.language, payload.material_group). Accepts either structured JSON "
+        "Creates, updates, and deletes material master fields in S/4HANA (T-codes "
+        "MM01/MM02). Five actions supported: 'update_status' (payload.status - the "
+        "new CrossPlantStatus code), 'update_description' (payload.description, "
+        "optional payload.language, default 'EN'), 'create_material' (requires "
+        "material_number plus payload.product_type, payload.industry_sector, "
+        "payload.base_unit; optional payload.description, payload.language, "
+        "payload.material_group), 'create_supply_planning' (requires payload.plant "
+        "for a material that already exists; optional MRP fields such as "
+        "payload.mrp_type, payload.mrp_responsible, payload.procurement_type), and "
+        "'delete_description' (removes a material's description for a given "
+        "payload.language, default 'EN'). Accepts either structured JSON "
         "(material_number, action, payload) or a plain free-text instruction."
     ),
     tags=["s4hana", "material", "action", "mm01", "mm02"],
@@ -27,6 +31,8 @@ SKILL = AgentSkill(
         "Change the status of material TG20 to Z1",
         "Update the description of material TG20 to 'Trade Item 20'",
         "Create a new material TG99, type FERT, industry sector M, base unit EA, description 'New Trade Item'",
+        "Set up MRP data for material TG99 in plant 1010, MRP type PD, procurement type X",
+        "Delete the German description of material TG20",
     ],
     input_modes=["application/json", "text/plain"],
     output_modes=["application/json", "text/plain"],
@@ -76,19 +82,69 @@ def create_material(
     return perform_material_action(material_number=material_number, action="create_material", payload=payload)
 
 
-_TOOLS = [update_material_status, update_material_description, create_material]
+@tool
+def create_material_supply_planning(
+    material_number: str,
+    plant: str,
+    mrp_type: str | None = None,
+    mrp_responsible: str | None = None,
+    mrp_group: str | None = None,
+    procurement_type: str | None = None,
+    lot_sizing_procedure: str | None = None,
+    availability_check_type: str | None = None,
+    abc_indicator: str | None = None,
+    safety_stock_quantity: str | None = None,
+    planned_delivery_duration_in_days: str | None = None,
+) -> dict:
+    """Set plant-level MRP/supply-planning data for a material master record that
+    already exists (T-code MM02, MRP views). plant is the SAP plant code (e.g.
+    '1010'). mrp_type is the MRP type (e.g. 'PD'). procurement_type is 'X' (both),
+    'E' (in-house), or 'F' (external). All other fields are optional SAP codes/
+    quantities for the material's planning data in that plant."""
+    payload = {
+        "plant": plant,
+        "mrp_type": mrp_type,
+        "mrp_responsible": mrp_responsible,
+        "mrp_group": mrp_group,
+        "procurement_type": procurement_type,
+        "lot_sizing_procedure": lot_sizing_procedure,
+        "availability_check_type": availability_check_type,
+        "abc_indicator": abc_indicator,
+        "safety_stock_quantity": safety_stock_quantity,
+        "planned_delivery_duration_in_days": planned_delivery_duration_in_days,
+    }
+    return perform_material_action(material_number=material_number, action="create_supply_planning", payload=payload)
 
-_AGENT_SYSTEM_PROMPT = """You update material master fields and create new materials in S/4HANA \
-using the tools available. Only call a tool if the user's instruction clearly states all the \
-required values - never guess or invent values (especially product_type, industry_sector, and \
-base_unit for create_material). If anything required is missing or ambiguous, ask the user to \
-clarify instead of calling a tool. Keep answers short and factual (1-2 sentences)."""
+
+@tool
+def delete_material_description(material_number: str, language: str = "EN") -> dict:
+    """Delete a material master's description for a given language (T-code MM02).
+    language is a 2-letter SAP language code, defaults to EN."""
+    return perform_material_action(
+        material_number=material_number, action="delete_description", payload={"language": language}
+    )
+
+
+_TOOLS = [
+    update_material_status,
+    update_material_description,
+    create_material,
+    create_material_supply_planning,
+    delete_material_description,
+]
+
+_AGENT_SYSTEM_PROMPT = """You create, update, and delete material master fields in S/4HANA using \
+the tools available. Only call a tool if the user's instruction clearly states all the required \
+values - never guess or invent values (especially product_type, industry_sector, and base_unit \
+for create_material, or plant and mrp_type for create_material_supply_planning). If anything \
+required is missing or ambiguous, ask the user to clarify instead of calling a tool. Keep answers \
+short and factual (1-2 sentences)."""
 
 
 def build_action_agent_card(base_url: str):
     return build_agent_card(
         name="Material Action Agent",
-        description="Updates material master fields (status, description) in S/4HANA.",
+        description="Creates, updates, and deletes material master fields (status, description, MRP/planning data) in S/4HANA.",
         skill=SKILL,
         base_url=base_url,
     )
