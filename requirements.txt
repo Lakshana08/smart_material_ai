@@ -1,7 +1,5 @@
 a2a-sdk
 aenum
-ai-api-client-sdk
-ai-core-sdk
 aioboto3
 aiobotocore
 aiofiles
@@ -30,7 +28,6 @@ et_xmlfile
 fastapi
 frozenlist
 furl
-generative-ai-hub-sdk
 google-api-core
 google-auth
 google-cloud-aiplatform

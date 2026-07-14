@@ -12,12 +12,16 @@ Two real, confirmed targets (checked live against API_PRODUCT_SRV, 2026-07-08):
   Language='<lang>') - descriptions do NOT live on A_Product itself (it
   only has a to_Description navigation property); this related entity has
   its own composite key (Product + Language) and its own field
-  (ProductDescription).
+  (ProductDescription). Confirmed live (2026-07-13) that most products only
+  carry descriptions for a handful of languages, not every language SAP
+  ships - PATCHing a Product/Language combo that was never maintained 404s
+  since PATCH only updates existing entities, so on a 404 this falls back
+  to POST A_ProductDescription to create that language variant instead.
 
 Both confirmed via live GETs, not guessed. NOT yet confirmed: an actual
-PATCH has never been executed against this system - if the Gateway turns
-out to require If-Match despite no ETag being exposed, add
-headers={"If-Match": "*"} to the mutate call.
+PATCH against an *existing* description has never been executed against
+this system - if the Gateway turns out to require If-Match despite no
+ETag being exposed, add headers={"If-Match": "*"} to the mutate call.
 
 - "create_material" -> POST A_Product, then (if a description was given) a
   second POST A_ProductDescription. Two separate calls, not a deep insert:
@@ -28,37 +32,20 @@ headers={"If-Match": "*"} to the mutate call.
   mandatory for creation. Only external material number assignment is
   supported (material_number is required) - internal number ranges
   (omitting Product) are not handled here.
-
-Two more, per SAP Help's "Create/Read/Update/Delete Product Master Data"
-page - documented, NOT yet confirmed live against this system:
-
-- "create_supply_planning" -> POST A_ProductSupplyPlanning. Plant-level MRP
-  data (MRP type/responsible/group, procurement type, lot sizing, safety
-  stock, etc.) for a material that must already exist (create_material
-  first). Separate entity/call, same reasoning as the description split
-  above. Only the commonly-set fields are named parameters; anything else
-  SAP's docs list for this entity can be passed via payload.extra_fields.
-
-- "delete_description" -> DELETE A_ProductDescription(Product='<material>',
-  Language='<lang>'). This is the only delete SAP's docs demonstrate for
-  this API - there's no documented hard-delete for A_Product itself (SAP
-  generally treats material deletion as a status flag, not a real DELETE).
 """
 
-from app.services.s4_client import get_s4_client
+from app.services.s4_client import S4ClientError, get_s4_client
 
 _PRODUCT_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_Product"
 _PRODUCT_DESCRIPTION_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductDescription"
-_PRODUCT_SUPPLY_PLANNING_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductSupplyPlanning"
 
 _DEFAULT_LANGUAGE = "EN"
 
 
 def perform_material_action(material_number: str, action: str, payload: dict | None = None) -> dict:
-    """Create, update, or delete material master fields. action is one of
-    "update_status", "update_description", "create_material",
-    "create_supply_planning", or "delete_description"; payload carries the
-    new value(s).
+    """Update material master fields, or delete a description. action is one of
+    "update_status", "update_description", "create_material", or
+    "delete_description"; payload carries the new value(s).
     """
     payload = payload or {}
 
@@ -76,10 +63,20 @@ def perform_material_action(material_number: str, action: str, payload: dict | N
             raise ValueError("update_description requires payload.description (the new text)")
         language = payload.get("language", _DEFAULT_LANGUAGE)
         client = get_s4_client()
-        client.patch(
-            f"{_PRODUCT_DESCRIPTION_PATH}(Product='{material_number}',Language='{language}')",
-            json_body={"ProductDescription": description},
-        )
+        try:
+            client.patch(
+                f"{_PRODUCT_DESCRIPTION_PATH}(Product='{material_number}',Language='{language}')",
+                json_body={"ProductDescription": description},
+            )
+        except S4ClientError as exc:
+            if exc.status_code != 404:
+                raise
+            # No description exists yet for this Product/Language combo -
+            # PATCH only updates existing entities, so create it instead.
+            client.post(
+                _PRODUCT_DESCRIPTION_PATH,
+                json_body={"Product": material_number, "Language": language, "ProductDescription": description},
+            )
         return {
             "status": "ok",
             "material_number": material_number,
@@ -128,33 +125,6 @@ def perform_material_action(material_number: str, action: str, payload: dict | N
             "base_unit": base_unit,
         }
 
-    if action == "create_supply_planning":
-        plant = payload.get("plant")
-        if not plant:
-            raise ValueError("create_supply_planning requires payload.plant")
-
-        body: dict = {"Product": material_number, "Plant": plant}
-        field_map = {
-            "mrp_type": "MRPType",
-            "mrp_responsible": "MRPResponsible",
-            "mrp_group": "MRPGroup",
-            "procurement_type": "ProcurementType",
-            "lot_sizing_procedure": "LotSizingProcedure",
-            "availability_check_type": "AvailabilityCheckType",
-            "abc_indicator": "ABCIndicator",
-            "safety_stock_quantity": "SafetyStockQuantity",
-            "planned_delivery_duration_in_days": "PlannedDeliveryDurationInDays",
-        }
-        for payload_key, odata_field in field_map.items():
-            value = payload.get(payload_key)
-            if value is not None:
-                body[odata_field] = value
-        body.update(payload.get("extra_fields") or {})
-
-        client = get_s4_client()
-        client.post(_PRODUCT_SUPPLY_PLANNING_PATH, json_body=body)
-        return {"status": "ok", "material_number": material_number, "action": action, "plant": plant}
-
     if action == "delete_description":
         language = payload.get("language", _DEFAULT_LANGUAGE)
         client = get_s4_client()
@@ -162,6 +132,6 @@ def perform_material_action(material_number: str, action: str, payload: dict | N
         return {"status": "ok", "material_number": material_number, "action": action, "language": language}
 
     raise ValueError(
-        f"Unknown action '{action}', expected 'update_status', 'update_description', 'create_material', "
-        "'create_supply_planning', or 'delete_description'"
+        "Unknown action '{}', expected 'update_status', 'update_description', 'create_material', "
+        "or 'delete_description'".format(action)
     )

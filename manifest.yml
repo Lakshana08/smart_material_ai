@@ -5,7 +5,7 @@ applications:
       - python_buildpack
     command: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     env:
-      S4_DESTINATION_NAME: S4HANA_MATERIAL_API
+      S4_DESTINATION_NAME: S43
     services:
       - smart-material-ai-destination
       - smart-material-ai-connectivity

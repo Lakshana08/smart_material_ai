@@ -26,14 +26,14 @@ class Settings(BaseSettings):
 
     report_download_ttl_seconds: int = 60 * 15
 
-    # SAP AI Core - direct Foundation Model access (gen_ai_hub.proxy.native.openai),
+    # SAP AI Core - direct Foundation Model access (app/services/ai_core.py),
     # used by the 3 agents to (a) parse free-text task input into parameters
     # and (b) phrase natural-language response summaries. When False, agents
     # only accept structured JSON input and use their own template summaries
     # (current behavior, unaffected). NOTE: credentials themselves
     # (AICORE_CLIENT_ID/CLIENT_SECRET/AUTH_URL/BASE_URL/RESOURCE_GROUP) are
-    # read directly from the process environment by the gen_ai_hub SDK, not
-    # through this Settings class - see main.py's load_dotenv() call.
+    # read directly from the process environment, not through this Settings
+    # class - see main.py's load_dotenv() call.
     ai_core_enabled: bool = False
     ai_core_model_name: str = "gpt-4o-mini"
 

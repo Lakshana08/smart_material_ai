@@ -18,11 +18,10 @@ http://<host>/a2a/query/.well-known/agent-card.json, etc.
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
-# Must run before any gen_ai_hub import: the AI Core SDK reads
+# Must run before app.services.ai_core is imported: it reads
 # AICORE_CLIENT_ID/CLIENT_SECRET/AUTH_URL/BASE_URL/RESOURCE_GROUP directly
-# from os.environ (see app/services/ai_core.py) rather than through
-# app.core.config.Settings, so .env values need to land in the real process
-# environment for local development.
+# from os.environ rather than through app.core.config.Settings, so .env
+# values need to land in the real process environment for local development.
 load_dotenv()
 
 from a2a.server.request_handlers import DefaultRequestHandler
