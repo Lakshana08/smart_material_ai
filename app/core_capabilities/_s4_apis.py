@@ -63,9 +63,19 @@ MATERIAL_SERIAL_NUMBER = S4Api(
     key_field="Material",
 )
 
+# MRP area data (MD03/MM03 planning view) - per-plant, per-MRP-area planning
+# parameters (MRP type/controller, reorder point, safety stock, lot sizing).
+# Composite key: Product + Plant + MRPArea, all plain top-level properties
+# per $metadata, so $filter works directly - no $expand needed.
+PRODUCT_PLANT_MRP_AREA = S4Api(
+    path="/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductPlantMRPArea",
+    key_field="Product",
+)
+
 BY_NAME = {
     "material_master": PRODUCT_MASTER,
     "material_stock": MATERIAL_STOCK,
     "production_order": PRODUCTION_ORDER,
     "material_serial_number": MATERIAL_SERIAL_NUMBER,
+    "material_mrp_area": PRODUCT_PLANT_MRP_AREA,
 }

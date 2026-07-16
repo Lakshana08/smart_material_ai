@@ -1,16 +1,18 @@
 """Query capability: read-only lookups against S/4HANA.
 
-Four real S/4 transactions are wired up, each behind its own function so
+Five real S/4 transactions are wired up, each behind its own function so
 the query agent can route explicitly rather than guessing:
   - MM03 (material/product master)     -> query_material_master()
   - MMBE (stock overview)              -> query_material_stock()
   - COOIS (production order info)      -> query_production_order()
   - MMBE (serialized stock)            -> query_material_serial_numbers()
+  - MM03 (MRP area planning data)      -> query_material_mrp_area()
 """
 
 from app.core_capabilities._s4_apis import (
     MATERIAL_SERIAL_NUMBER,
     MATERIAL_STOCK,
+    PRODUCT_PLANT_MRP_AREA,
     PRODUCTION_ORDER,
     PRODUCT_MASTER,
 )
@@ -127,6 +129,32 @@ def query_material_serial_numbers(
         "material": material,
         "plant": plant,
         "serial_number": serial_number,
+        "results": rows,
+        "count": len(rows),
+    }
+
+
+def query_material_mrp_area(
+    product: str,
+    plant: str | None = None,
+    mrp_area: str | None = None,
+) -> dict:
+    """MRP area planning data (MRP type/controller, reorder point, safety
+    stock, lot sizing) for a product, optionally scoped to a plant and/or
+    MRP area. Product/Plant/MRPArea are plain top-level properties, so no
+    $expand is needed here.
+    """
+    filters = [f"Product eq '{product}'"]
+    if plant:
+        filters.append(f"Plant eq '{plant}'")
+    if mrp_area:
+        filters.append(f"MRPArea eq '{mrp_area}'")
+    data = get_s4_client().get(PRODUCT_PLANT_MRP_AREA.path, params={"$filter": " and ".join(filters)})
+    rows = extract_rows(data)
+    return {
+        "product": product,
+        "plant": plant,
+        "mrp_area": mrp_area,
         "results": rows,
         "count": len(rows),
     }

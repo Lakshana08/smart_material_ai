@@ -32,14 +32,47 @@ ETag being exposed, add headers={"If-Match": "*"} to the mutate call.
   mandatory for creation. Only external material number assignment is
   supported (material_number is required) - internal number ranges
   (omitting Product) are not handled here.
+
+- "update_mrp_area" -> PATCH A_ProductPlantMRPArea(Product='<material>',
+  Plant='<plant>',MRPArea='<mrp_area>') - MRP planning fields (reorder
+  point, safety stock, MRP type/controller, lot sizing) live on this entity,
+  keyed by Product+Plant+MRPArea per $metadata. CONFIRMED LIVE (2026-07-16)
+  THIS DOES NOT WORK: both a native PATCH and a tunneled POST with
+  X-HTTP-Method: PATCH against this entity return the same Gateway error,
+  "The specified HTTP method is not allowed for the resource identified by
+  the Data Service Request URI". $metadata only marks this entity
+  sap:deletable="false" (no explicit sap:updatable="false"), which looked
+  writable on paper, but the live backend has no update implementation
+  behind it regardless. The code below is left in place but will raise
+  S4ClientError against this system until a working write path is found -
+  most likely a BAPI-based route (e.g. BAPI_MATERIAL_SAVEDATA) rather than
+  this OData service.
 """
 
 from app.services.s4_client import S4ClientError, get_s4_client
 
 _PRODUCT_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_Product"
 _PRODUCT_DESCRIPTION_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductDescription"
+_PRODUCT_PLANT_MRP_AREA_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductPlantMRPArea"
 
 _DEFAULT_LANGUAGE = "EN"
+
+# Friendly payload key -> A_ProductPlantMRPArea OData field name, for the
+# planning parameters callers actually adjust day-to-day. The entity has
+# other fields too (see core_capabilities/query.py's docstring for the full
+# set fetched on read) but only these are exposed for write here.
+_MRP_AREA_FIELD_MAP = {
+    "mrp_type": "MRPType",
+    "mrp_controller": "MRPResponsible",
+    "mrp_group": "MRPGroup",
+    "reorder_point": "ReorderThresholdQuantity",
+    "safety_stock": "SafetyStockQuantity",
+    "minimum_lot_size": "MinimumLotSizeQuantity",
+    "maximum_lot_size": "MaximumLotSizeQuantity",
+    "maximum_stock": "MaximumStockQuantity",
+    "lot_sizing_procedure": "LotSizingProcedure",
+    "planning_time_fence": "PlanningTimeFence",
+}
 
 
 def perform_material_action(material_number: str, action: str, payload: dict | None = None) -> dict:
@@ -124,6 +157,38 @@ def perform_material_action(material_number: str, action: str, payload: dict | N
             "base_unit": base_unit,
         }
 
+    if action == "update_mrp_area":
+        plant = payload.get("plant")
+        mrp_area = payload.get("mrp_area")
+        if not plant or not mrp_area:
+            raise ValueError("update_mrp_area requires payload.plant and payload.mrp_area")
+
+        fields = {
+            sap_field: payload[key]
+            for key, sap_field in _MRP_AREA_FIELD_MAP.items()
+            if payload.get(key) is not None
+        }
+        if not fields:
+            raise ValueError(
+                "update_mrp_area requires at least one field to update, one of: "
+                + ", ".join(sorted(_MRP_AREA_FIELD_MAP))
+            )
+
+        client = get_s4_client()
+        client.patch(
+            f"{_PRODUCT_PLANT_MRP_AREA_PATH}(Product='{material_number}',Plant='{plant}',MRPArea='{mrp_area}')",
+            json_body=fields,
+        )
+        return {
+            "status": "ok",
+            "material_number": material_number,
+            "action": action,
+            "plant": plant,
+            "mrp_area": mrp_area,
+            "updated_fields": fields,
+        }
+
     raise ValueError(
-        f"Unknown action '{action}', expected 'update_status', 'update_description', or 'create_material'"
+        f"Unknown action '{action}', expected 'update_status', 'update_description', "
+        "'create_material', or 'update_mrp_area'"
     )
