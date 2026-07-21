@@ -33,6 +33,7 @@ from a2a.utils.constants import DEFAULT_RPC_URL
 from app.a2a_agents.action_agent import ActionAgentExecutor, build_action_agent_card
 from app.a2a_agents.query_agent import QueryAgentExecutor, build_query_agent_card
 from app.a2a_agents.report_agent import ReportAgentExecutor, build_report_agent_card
+from app.a2a_agents.status_agent import StatusAgentExecutor, build_status_agent_card
 from app.core.config import get_settings
 from app.routers.reports import router as reports_router
 
@@ -40,6 +41,7 @@ _AGENTS = {
     "query": (build_query_agent_card, QueryAgentExecutor),
     "action": (build_action_agent_card, ActionAgentExecutor),
     "report": (build_report_agent_card, ReportAgentExecutor),
+    "status": (build_status_agent_card, StatusAgentExecutor),
 }
 
 
