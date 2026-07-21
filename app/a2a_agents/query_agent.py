@@ -10,6 +10,7 @@ from app.core_capabilities.query import (
     query_material_mrp_area,
     query_material_serial_numbers,
     query_material_stock,
+    query_material_supply_planning,
     query_production_order,
 )
 from app.services.ai_core import run_agent
@@ -28,7 +29,9 @@ SKILL = AgentSkill(
         "'material_serial_number' (MMBE serialized stock - needs material, "
         "optional plant and serial_number), "
         "'material_mrp_area' (MRP area planning data - needs product, optional "
-        "plant and mrp_area). "
+        "plant and mrp_area), "
+        "'material_supply_planning' (plant-level MRP1/MRP2 supply planning data - "
+        "needs product, optional plant). "
         "Defaults to 'material_stock' if query_type is omitted."
     ),
     tags=["s4hana", "material", "production-order", "query"],
@@ -87,20 +90,29 @@ def lookup_material_mrp_area(product: str, plant: str = "", mrp_area: str = "") 
     )
 
 
+@tool
+def lookup_material_supply_planning(product: str, plant: str = "") -> dict:
+    """Look up plant-level supply planning data (MM02 MRP1/MRP2 view - MRP type/controller,
+    reorder point, safety stock, lot sizing) for a product, optionally scoped to a plant.
+    Distinct from lookup_material_mrp_area - this has no MRP area, just product/plant."""
+    return query_material_supply_planning(product=product, plant=plant or None)
+
+
 _TOOLS = [
     lookup_material_stock,
     lookup_material_master,
     lookup_production_order,
     lookup_material_serial_numbers,
     lookup_material_mrp_area,
+    lookup_material_supply_planning,
 ]
 
 _AGENT_SYSTEM_PROMPT = """You answer questions about S/4HANA material master data, stock levels, \
-production orders, serialized stock, and MRP planning data (reorder point, safety stock, lot \
-sizing) using the tools available. Always call the appropriate tool to get real data before \
-answering - never invent numbers or data. Keep answers short and factual (1-3 sentences). If \
-the question doesn't give you enough information to call a tool (e.g. no material number), ask the \
-user for what's missing instead of guessing."""
+production orders, serialized stock, MRP area planning data, and plant-level supply planning data \
+(reorder point, safety stock, lot sizing) using the tools available. Always call the appropriate \
+tool to get real data before answering - never invent numbers or data. Keep answers short and \
+factual (1-3 sentences). If the question doesn't give you enough information to call a tool (e.g. \
+no material number), ask the user for what's missing instead of guessing."""
 
 
 def build_query_agent_card(base_url: str):
@@ -108,7 +120,7 @@ def build_query_agent_card(base_url: str):
         name="Material Query Agent",
         description=(
             "Answers questions about material master data, stock levels, production orders, "
-            "serialized stock, and MRP planning data in S/4HANA."
+            "serialized stock, MRP area planning data, and plant-level supply planning data in S/4HANA."
         ),
         skill=SKILL,
         base_url=base_url,
@@ -124,6 +136,7 @@ _REQUIRED_FIELD = {
     "production_order": None,
     "material_serial_number": "material",
     "material_mrp_area": "product",
+    "material_supply_planning": "product",
 }
 
 
@@ -167,6 +180,16 @@ def _run_structured_query(args: dict) -> tuple[dict, str]:
             f"Found {result['count']} MRP area record(s) for product {product}."
             if result["results"]
             else f"No MRP area data found for product {product}."
+        )
+        return result, summary
+
+    if query_type == "material_supply_planning":
+        product = args.get("product") or args.get("material_number")
+        result = query_material_supply_planning(product=product, plant=args.get("plant"))
+        summary = (
+            f"Found {result['count']} supply planning record(s) for product {product}."
+            if result["results"]
+            else f"No supply planning data found for product {product}."
         )
         return result, summary
 

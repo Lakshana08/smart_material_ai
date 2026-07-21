@@ -14,18 +14,21 @@ SKILL = AgentSkill(
     name="Perform Material Action",
     description=(
         "Updates material master fields in S/4HANA (T-code MM02), creates new "
-        "material masters (T-code MM01), and updates MRP area planning data. Four "
+        "material masters (T-code MM01), and updates MRP area / supply planning data. Five "
         "actions supported: 'update_status' (payload.status - the new CrossPlantStatus "
         "code), 'update_description' (payload.description, optional payload.language, "
         "default 'EN'), 'create_material' (requires material_number plus "
         "payload.product_type, payload.industry_sector, payload.base_unit; optional "
-        "payload.description, payload.language, payload.material_group), and "
+        "payload.description, payload.language, payload.material_group), "
         "'update_mrp_area' (requires payload.plant, payload.mrp_area, and at least one "
-        "of payload.reorder_point, payload.safety_stock, payload.mrp_type, "
-        "payload.mrp_controller, payload.mrp_group, payload.minimum_lot_size, "
-        "payload.maximum_lot_size, payload.maximum_stock, payload.lot_sizing_procedure, "
-        "payload.planning_time_fence). Accepts either structured JSON (material_number, "
-        "action, payload) or a plain free-text instruction."
+        "of the planning fields below), and 'update_supply_planning' (plant-level, no "
+        "MRP area - requires payload.plant and at least one of the planning fields "
+        "below). Planning fields for both: payload.reorder_point, payload.safety_stock, "
+        "payload.mrp_type, payload.mrp_controller, payload.mrp_group, "
+        "payload.minimum_lot_size, payload.maximum_lot_size, payload.maximum_stock, "
+        "payload.lot_sizing_procedure, payload.planning_time_fence. Accepts either "
+        "structured JSON (material_number, action, payload) or a plain free-text "
+        "instruction."
     ),
     tags=["s4hana", "material", "action", "mm01", "mm02", "mrp"],
     examples=[
@@ -33,6 +36,7 @@ SKILL = AgentSkill(
         "Update the description of material TG20 to 'Trade Item 20'",
         "Create a new material TG99, type FERT, industry sector M, base unit EA, description 'New Trade Item'",
         "Set the reorder point for MAT-1000 at plant 1010 MRP area 1010 to 50",
+        "Set the safety stock for MAT-1000 at plant 1010 to 20 (plant-level, no MRP area)",
     ],
     input_modes=["application/json", "text/plain"],
     output_modes=["application/json", "text/plain"],
@@ -120,21 +124,67 @@ def update_material_mrp_area(
     return perform_material_action(material_number=material_number, action="update_mrp_area", payload=payload)
 
 
-_TOOLS = [update_material_status, update_material_description, create_material, update_material_mrp_area]
+@tool
+def update_material_supply_planning(
+    material_number: str,
+    plant: str,
+    reorder_point: float | None = None,
+    safety_stock: float | None = None,
+    mrp_type: str | None = None,
+    mrp_controller: str | None = None,
+    mrp_group: str | None = None,
+    minimum_lot_size: float | None = None,
+    maximum_lot_size: float | None = None,
+    maximum_stock: float | None = None,
+    lot_sizing_procedure: str | None = None,
+    planning_time_fence: str | None = None,
+) -> dict:
+    """Update plant-level supply planning data for a material at a plant (composite key:
+    material_number + plant, no MRP area - use update_material_mrp_area instead if the
+    user specifies an MRP area). Pass only the field(s) that should change - at least one
+    of reorder_point, safety_stock, mrp_type, mrp_controller, mrp_group, minimum_lot_size,
+    maximum_lot_size, maximum_stock, lot_sizing_procedure, or planning_time_fence is
+    required."""
+    payload = {
+        "plant": plant,
+        "reorder_point": reorder_point,
+        "safety_stock": safety_stock,
+        "mrp_type": mrp_type,
+        "mrp_controller": mrp_controller,
+        "mrp_group": mrp_group,
+        "minimum_lot_size": minimum_lot_size,
+        "maximum_lot_size": maximum_lot_size,
+        "maximum_stock": maximum_stock,
+        "lot_sizing_procedure": lot_sizing_procedure,
+        "planning_time_fence": planning_time_fence,
+    }
+    return perform_material_action(material_number=material_number, action="update_supply_planning", payload=payload)
+
+
+_TOOLS = [
+    update_material_status,
+    update_material_description,
+    create_material,
+    update_material_mrp_area,
+    update_material_supply_planning,
+]
 
 _AGENT_SYSTEM_PROMPT = """You update material master fields, create new materials, and update MRP \
-area planning data (reorder point, safety stock, MRP type/controller, lot sizing) in S/4HANA using \
-the tools available. Only call a tool if the user's instruction clearly states all the required \
-values - never guess or invent values (especially product_type, industry_sector, and base_unit for \
-create_material, or plant/mrp_area for update_material_mrp_area). If anything required is missing \
-or ambiguous, ask the user to clarify instead of calling a tool. Keep answers short and factual \
-(1-2 sentences)."""
+area / plant-level supply planning data (reorder point, safety stock, MRP type/controller, lot \
+sizing) in S/4HANA using the tools available. Use update_material_mrp_area only when the user gives \
+an MRP area; use update_material_supply_planning for plant-level changes with no MRP area. Only \
+call a tool if the user's instruction clearly states all the required values - never guess or \
+invent values (especially product_type, industry_sector, and base_unit for create_material, or \
+plant/mrp_area for the planning tools). If anything required is missing or ambiguous, ask the user \
+to clarify instead of calling a tool. Keep answers short and factual (1-2 sentences)."""
 
 
 def build_action_agent_card(base_url: str):
     return build_agent_card(
         name="Material Action Agent",
-        description="Updates material master fields (status, description, MRP area planning data) in S/4HANA.",
+        description=(
+            "Updates material master fields (status, description, MRP area / supply planning data) in S/4HANA."
+        ),
         skill=SKILL,
         base_url=base_url,
     )

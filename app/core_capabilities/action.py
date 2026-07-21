@@ -36,17 +36,34 @@ ETag being exposed, add headers={"If-Match": "*"} to the mutate call.
 - "update_mrp_area" -> PATCH A_ProductPlantMRPArea(Product='<material>',
   Plant='<plant>',MRPArea='<mrp_area>') - MRP planning fields (reorder
   point, safety stock, MRP type/controller, lot sizing) live on this entity,
-  keyed by Product+Plant+MRPArea per $metadata. CONFIRMED LIVE (2026-07-16)
-  THIS DOES NOT WORK: both a native PATCH and a tunneled POST with
-  X-HTTP-Method: PATCH against this entity return the same Gateway error,
-  "The specified HTTP method is not allowed for the resource identified by
-  the Data Service Request URI". $metadata only marks this entity
-  sap:deletable="false" (no explicit sap:updatable="false"), which looked
-  writable on paper, but the live backend has no update implementation
-  behind it regardless. The code below is left in place but will raise
-  S4ClientError against this system until a working write path is found -
-  most likely a BAPI-based route (e.g. BAPI_MATERIAL_SAVEDATA) rather than
-  this OData service.
+  keyed by Product+Plant+MRPArea per $metadata. Confirmed live (2026-07-16)
+  that a PATCH with a valid X-CSRF-Token succeeds (SafetyStockQuantity
+  round-tripped 0 -> 5, verified via a follow-up GET) and needs no If-Match -
+  same as update_status/update_description above. An earlier round of
+  testing without a valid CSRF token on this same entity returned a
+  misleading Gateway error ("The specified HTTP method is not allowed for
+  the resource identified by the Data Service Request URI"), which looks
+  like a missing-operation error but was actually just the CSRF rejection -
+  not something to read as "this entity is read-only" if it recurs. Also
+  confirmed live (2026-07-16): this entity's decimal fields (e.g.
+  SafetyStockQuantity) must be sent as JSON strings, not numbers - a raw
+  number 400s with CX_SXML_PARSE_ERROR ("Failed to read property ... at
+  offset ..."), so numeric payload values are stringified before the PATCH.
+
+- "update_supply_planning" -> PATCH A_ProductSupplyPlanning(Product='<material>',
+  Plant='<plant>') - plant-level MRP1/MRP2 supply planning fields (same
+  reorder point/safety stock/lot sizing/MRP type-controller fields as
+  update_mrp_area, per $metadata), keyed by Product+Plant only (no MRP
+  area). Confirmed against SAP's own API Business Hub docs for
+  API_PRODUCT_SRV (2026-07-16): PATCH is explicitly documented here
+  ("Updates supply planning data of a product master record", 204 on
+  success), and the documented writable field names match
+  _PLANNING_FIELD_MAP - unlike A_ProductPlantMRPArea, which looked writable
+  on paper too but needed an actual live PATCH to prove it (missing CSRF
+  token gave a misleading "method not allowed" error there). Still NOT yet
+  live-tested against this specific system - documentation-level
+  confirmation isn't the same as a live PATCH succeeding here, and this
+  system's version could differ from what's shown on API Business Hub.
 """
 
 from app.services.s4_client import S4ClientError, get_s4_client
@@ -54,14 +71,18 @@ from app.services.s4_client import S4ClientError, get_s4_client
 _PRODUCT_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_Product"
 _PRODUCT_DESCRIPTION_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductDescription"
 _PRODUCT_PLANT_MRP_AREA_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductPlantMRPArea"
+_PRODUCT_SUPPLY_PLANNING_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductSupplyPlanning"
 
 _DEFAULT_LANGUAGE = "EN"
 
-# Friendly payload key -> A_ProductPlantMRPArea OData field name, for the
-# planning parameters callers actually adjust day-to-day. The entity has
-# other fields too (see core_capabilities/query.py's docstring for the full
-# set fetched on read) but only these are exposed for write here.
-_MRP_AREA_FIELD_MAP = {
+# Friendly payload key -> OData field name, for the planning parameters
+# callers actually adjust day-to-day. Shared by update_mrp_area and
+# update_supply_planning below - A_ProductPlantMRPArea and
+# A_ProductSupplyPlanning use identical field names for these (confirmed via
+# $metadata), they just differ in key shape (+ MRPArea vs not). Both entities
+# have other fields too (see core_capabilities/query.py for the full set
+# fetched on read) but only these are exposed for write here.
+_PLANNING_FIELD_MAP = {
     "mrp_type": "MRPType",
     "mrp_controller": "MRPResponsible",
     "mrp_group": "MRPGroup",
@@ -163,15 +184,20 @@ def perform_material_action(material_number: str, action: str, payload: dict | N
         if not plant or not mrp_area:
             raise ValueError("update_mrp_area requires payload.plant and payload.mrp_area")
 
+        # This Gateway's OData v2 JSON serializes Edm.Decimal fields as
+        # strings (confirmed live: every GET returns e.g.
+        # "SafetyStockQuantity": "0"), and rejects a bare JSON number with
+        # CX_SXML_PARSE_ERROR ("Failed to read property ... at offset ...") -
+        # so numeric payload values must be stringified before sending.
         fields = {
-            sap_field: payload[key]
-            for key, sap_field in _MRP_AREA_FIELD_MAP.items()
+            sap_field: str(payload[key]) if isinstance(payload[key], (int, float)) else payload[key]
+            for key, sap_field in _PLANNING_FIELD_MAP.items()
             if payload.get(key) is not None
         }
         if not fields:
             raise ValueError(
                 "update_mrp_area requires at least one field to update, one of: "
-                + ", ".join(sorted(_MRP_AREA_FIELD_MAP))
+                + ", ".join(sorted(_PLANNING_FIELD_MAP))
             )
 
         client = get_s4_client()
@@ -188,7 +214,36 @@ def perform_material_action(material_number: str, action: str, payload: dict | N
             "updated_fields": fields,
         }
 
+    if action == "update_supply_planning":
+        plant = payload.get("plant")
+        if not plant:
+            raise ValueError("update_supply_planning requires payload.plant")
+
+        fields = {
+            sap_field: str(payload[key]) if isinstance(payload[key], (int, float)) else payload[key]
+            for key, sap_field in _PLANNING_FIELD_MAP.items()
+            if payload.get(key) is not None
+        }
+        if not fields:
+            raise ValueError(
+                "update_supply_planning requires at least one field to update, one of: "
+                + ", ".join(sorted(_PLANNING_FIELD_MAP))
+            )
+
+        client = get_s4_client()
+        client.patch(
+            f"{_PRODUCT_SUPPLY_PLANNING_PATH}(Product='{material_number}',Plant='{plant}')",
+            json_body=fields,
+        )
+        return {
+            "status": "ok",
+            "material_number": material_number,
+            "action": action,
+            "plant": plant,
+            "updated_fields": fields,
+        }
+
     raise ValueError(
         f"Unknown action '{action}', expected 'update_status', 'update_description', "
-        "'create_material', or 'update_mrp_area'"
+        "'create_material', 'update_mrp_area', or 'update_supply_planning'"
     )

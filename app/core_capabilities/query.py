@@ -1,18 +1,20 @@
 """Query capability: read-only lookups against S/4HANA.
 
-Five real S/4 transactions are wired up, each behind its own function so
+Six real S/4 transactions are wired up, each behind its own function so
 the query agent can route explicitly rather than guessing:
   - MM03 (material/product master)     -> query_material_master()
   - MMBE (stock overview)              -> query_material_stock()
   - COOIS (production order info)      -> query_production_order()
   - MMBE (serialized stock)            -> query_material_serial_numbers()
   - MM03 (MRP area planning data)      -> query_material_mrp_area()
+  - MM03 (plant-level supply planning) -> query_material_supply_planning()
 """
 
 from app.core_capabilities._s4_apis import (
     MATERIAL_SERIAL_NUMBER,
     MATERIAL_STOCK,
     PRODUCT_PLANT_MRP_AREA,
+    PRODUCT_SUPPLY_PLANNING,
     PRODUCTION_ORDER,
     PRODUCT_MASTER,
 )
@@ -92,10 +94,14 @@ def query_production_order(
     material: str | None = None,
     plant: str | None = None,
 ) -> dict:
-    """COOIS - production order info, filterable by order/material/plant."""
+    """COOIS - production order info, filterable by order/material/plant.
+
+    The entity's key field is "ManufacturingOrder", not "ProductionOrder" -
+    confirmed live 2026-07-17 (see _s4_apis.py's PRODUCTION_ORDER comment).
+    """
     filters = []
     if production_order:
-        filters.append(f"ProductionOrder eq '{production_order}'")
+        filters.append(f"ManufacturingOrder eq '{production_order}'")
     if material:
         filters.append(f"Material eq '{material}'")
     if plant:
@@ -158,3 +164,17 @@ def query_material_mrp_area(
         "results": rows,
         "count": len(rows),
     }
+
+
+def query_material_supply_planning(product: str, plant: str | None = None) -> dict:
+    """Plant-level supply planning data (MM02 MRP1/MRP2 view) for a product,
+    optionally scoped to a plant. Distinct from query_material_mrp_area()
+    above - this entity has no MRP area, just Product + Plant, both plain
+    top-level properties, so no $expand is needed here either.
+    """
+    filters = [f"Product eq '{product}'"]
+    if plant:
+        filters.append(f"Plant eq '{plant}'")
+    data = get_s4_client().get(PRODUCT_SUPPLY_PLANNING.path, params={"$filter": " and ".join(filters)})
+    rows = extract_rows(data)
+    return {"product": product, "plant": plant, "results": rows, "count": len(rows)}

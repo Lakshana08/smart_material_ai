@@ -41,16 +41,17 @@ MATERIAL_STOCK = S4Api(
     has_plant_field=False,
 )
 
-# COOIS - Production order info system. Key: ProductionOrder, filterable by
-# Material and Plant. UNRESOLVED (live 400 error, 2026-07-08): "Property
-# ProductionOrder not found in type A_ProductionOrder_2Type" when filtering
-# by ProductionOrder eq '...' - either the real field name differs, or this
-# entity requires direct key access (A_ProductionOrder_2('...')) rather than
-# $filter on the key. Needs $metadata to confirm; Material/Plant filters are
-# unverified too until this is resolved.
+# COOIS - Production order info system. RESOLVED (live sample response,
+# 2026-07-17): the earlier 400 ("Property ProductionOrder not found in type
+# A_ProductionOrder_2Type") was because the real key field is named
+# "ManufacturingOrder", not "ProductionOrder" - confirmed via an actual row
+# ({"ManufacturingOrder": "1000000", "Material": "MZ-FG-R300", "Plant":
+# "1710", "MRPArea": "1710", ...}). Material/Plant/MRPArea are plain
+# top-level properties too, same as the row shows, so all three filter
+# directly with no $expand needed.
 PRODUCTION_ORDER = S4Api(
     path="/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/A_ProductionOrder_2",
-    key_field="ProductionOrder",
+    key_field="ManufacturingOrder",
 )
 
 # MMBE (serialized stock) - stock broken down by individual serial number /
@@ -72,10 +73,21 @@ PRODUCT_PLANT_MRP_AREA = S4Api(
     key_field="Product",
 )
 
+# Plant-level supply planning data (MM02 MRP1/MRP2 view) - distinct from
+# A_ProductPlantMRPArea above: this entity has no MRP area in its key, just
+# Product + Plant, both plain top-level properties per $metadata (same
+# pattern as PRODUCT_PLANT_MRP_AREA), so no $expand needed.
+PRODUCT_SUPPLY_PLANNING = S4Api(
+    path="/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductSupplyPlanning",
+    key_field="Product",
+)
+
+
 BY_NAME = {
     "material_master": PRODUCT_MASTER,
     "material_stock": MATERIAL_STOCK,
     "production_order": PRODUCTION_ORDER,
     "material_serial_number": MATERIAL_SERIAL_NUMBER,
     "material_mrp_area": PRODUCT_PLANT_MRP_AREA,
+    "material_supply_planning": PRODUCT_SUPPLY_PLANNING,
 }
