@@ -24,19 +24,30 @@ values placed in .env reach os.environ for the SDK to pick up locally.
 
 import json
 import logging
+from functools import lru_cache
 from typing import Any, Callable
 
 from app.core.config import get_settings
+from app.services.s4_client import S4ClientError
 
 logger = logging.getLogger(__name__)
 
 
+@lru_cache(maxsize=None)
 def _resolve_model_name(deployment_id: str) -> str:
     """gen_ai_hub's init_llm requires a model_name that matches the
     deployment even when deployment_id is also given (a quirk of its
     catalog lookup - deployment_id alone isn't sufficient), so look up the
     deployment's real registered model_name from AI Core rather than
     relying on a possibly-mismatched config default.
+
+    Cached per deployment_id: this was previously a live network call to AI
+    Core's deployment catalog on EVERY free-text request across all agents,
+    which is both slow and a real source of intermittent "AI Core
+    unavailable" failures on nothing more than a transient catalog-lookup
+    hiccup. A deployment's model_name doesn't change during a process's
+    lifetime, so resolve it once. lru_cache only caches successful returns -
+    a failure here isn't cached and will simply retry live on the next call.
     """
     from gen_ai_hub.proxy.core.proxy_clients import get_proxy_client
 
@@ -91,6 +102,16 @@ async def run_agent(
                     tool_outputs.append(message.content)
 
         return final_text, tool_outputs
+    except S4ClientError:
+        # Raised by a tool the model called (e.g. generate_report,
+        # perform_material_action), not by AI Core/the LLM itself - the
+        # agent picked the right tool and the tool ran, S/4HANA just
+        # rejected or failed to serve the request. Logged distinctly so
+        # this doesn't get mistaken for an AI Core outage server-side; the
+        # caller still sees the same "unavailable" fallback message today
+        # since narrowing that requires updating each agent's executor.
+        logger.exception("AI Core agent's tool call failed against S/4HANA")
+        return None
     except Exception:
-        logger.exception("AI Core agent execution failed")
+        logger.exception("AI Core agent execution failed (LLM call, tool-calling loop, or unexpected error)")
         return None
