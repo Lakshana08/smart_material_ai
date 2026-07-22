@@ -78,13 +78,18 @@ class DestinationService:
 
     def _static_destination(self) -> ResolvedDestination:
         settings = get_settings()
-        has_credentials = bool(settings.s4_username)
+        username, password = settings.s4_username, settings.s4_password
+        if bool(username) != bool(password):
+            raise RuntimeError(
+                "S4_USERNAME and S4_PASSWORD must both be set for BasicAuthentication, or both left "
+                "empty for NoAuthentication - only one of the two was provided."
+            )
         return ResolvedDestination(
             url=settings.s4_base_url,
             proxy_type="Internet",
-            authentication="BasicAuthentication" if has_credentials else "NoAuthentication",
-            username=settings.s4_username or None,
-            password=settings.s4_password or None,
+            authentication="BasicAuthentication" if username else "NoAuthentication",
+            username=username or None,
+            password=password or None,
         )
 
     def _resolve_live(self, destination_name: str) -> ResolvedDestination:

@@ -1,6 +1,15 @@
 from typing import Any
 
 
+def odata_literal(value: str) -> str:
+    """Escapes a value for embedding in a single-quoted OData string literal
+    inside a $filter clause. OData v2/v4 both escape an embedded `'` by
+    doubling it (`''`) - without this, a value containing a quote breaks out
+    of the literal and can inject extra filter clauses (e.g. `X' or Y eq 'Z`).
+    """
+    return value.replace("'", "''")
+
+
 def extract_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Normalizes OData v2 (`{"d": {"results": [...]}}`) and v4
     (`{"value": [...]}`) response shapes into a plain list of rows, with

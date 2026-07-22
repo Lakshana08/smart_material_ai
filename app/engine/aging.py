@@ -12,14 +12,21 @@ def compute_aging(
 ) -> list[dict]:
     results = []
     for row in aging_rows:
-        aging_days = row.get("Aging Days") or 0
+        aging_days = row.get("Aging Days")
+        aging_days_unknown = aging_days is None
+        # A missing Aging Days value means the source data can't say how old
+        # this stock is - err on flagging it for review rather than silently
+        # treating unknown as fresh (0 days), which would hide it from the
+        # aged-inventory count entirely.
+        is_aged = aging_days_unknown or aging_days > AGING_THRESHOLD_DAYS
         results.append(
             {
                 "material": row.get("Material"),
                 "storage_location": row.get("Storage Location"),
                 "plant": row.get("Plant"),
                 "aging_days": aging_days,
-                "is_aged": aging_days > AGING_THRESHOLD_DAYS,
+                "aging_days_unknown": aging_days_unknown,
+                "is_aged": is_aged,
                 "data_as_of": datetime.now(timezone.utc).isoformat(),
             }
         )

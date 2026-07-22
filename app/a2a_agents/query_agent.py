@@ -5,20 +5,28 @@ from a2a.server.events import EventQueue
 from a2a.types import AgentSkill
 
 from app.a2a_agents.common import build_agent_card, build_response_message, get_structured_input
-from app.core_capabilities.query import query_material_master, query_material_stock, query_production_order
+from app.core_capabilities.query import (
+    query_material_master,
+    query_material_serial_numbers,
+    query_material_stock,
+    query_production_order,
+)
 from app.services.ai_core import run_agent
 from app.services.s4_client import S4ClientError
+
+VALID_QUERY_TYPES = {"material_master", "material_stock", "production_order", "material_serial_number"}
 
 SKILL = AgentSkill(
     id="query_material",
     name="Query Material",
     description=(
         "Looks up data in S/4HANA. Accepts either structured JSON "
-        "(query_type + product/material/plant/production_order) or a plain "
+        "(query_type + product/material/plant/production_order/serial_number) or a plain "
         "free-text question. query_type selects the source: "
         "'material_master' (MM03 - needs product), "
         "'material_stock' (MMBE - needs material, optional plant), "
-        "'production_order' (COOIS - production_order and/or material and/or plant). "
+        "'production_order' (COOIS - production_order and/or material and/or plant), "
+        "'material_serial_number' (MMBE serialized stock - needs material, optional plant/serial_number). "
         "Defaults to 'material_stock' if query_type is omitted."
     ),
     tags=["s4hana", "material", "production-order", "query"],
@@ -26,6 +34,7 @@ SKILL = AgentSkill(
         "What's the stock for material MAT-1000?",
         "Look up material master data for product MAT-2000",
         "Show me production order 60001234",
+        "List serial numbers for material MAT-1000 at plant 1010",
     ],
     input_modes=["application/json", "text/plain"],
     output_modes=["application/json", "text/plain"],
@@ -54,19 +63,30 @@ def lookup_production_order(production_order: str = "", material: str = "", plan
     )
 
 
-_TOOLS = [lookup_material_stock, lookup_material_master, lookup_production_order]
+@tool
+def lookup_material_serial_number(material: str, plant: str = "", serial_number: str = "") -> dict:
+    """Look up serialized stock (MMBE, serial-number breakdown) for a material, optionally scoped to a plant and/or serial number."""
+    return query_material_serial_numbers(
+        material=material, plant=plant or None, serial_number=serial_number or None
+    )
+
+
+_TOOLS = [lookup_material_stock, lookup_material_master, lookup_production_order, lookup_material_serial_number]
 
 _AGENT_SYSTEM_PROMPT = """You answer questions about S/4HANA material master data, stock levels, \
-and production orders using the tools available. Always call the appropriate tool to get real data \
-before answering - never invent numbers or data. Keep answers short and factual (1-3 sentences). If \
-the question doesn't give you enough information to call a tool (e.g. no material number), ask the \
-user for what's missing instead of guessing."""
+production orders, and serialized stock (serial numbers) using the tools available. Always call the \
+appropriate tool to get real data before answering - never invent numbers or data. Keep answers short \
+and factual (1-3 sentences). If the question doesn't give you enough information to call a tool (e.g. \
+no material number), ask the user for what's missing instead of guessing."""
 
 
 def build_query_agent_card(base_url: str):
     return build_agent_card(
         name="Material Query Agent",
-        description="Answers questions about material master data, stock levels, and production orders in S/4HANA.",
+        description=(
+            "Answers questions about material master data, stock levels, production orders, "
+            "and serialized stock in S/4HANA."
+        ),
         skill=SKILL,
         base_url=base_url,
     )
@@ -95,6 +115,18 @@ def _run_structured_query(args: dict) -> tuple[dict, str]:
         summary = f"Found {result['count']} production order record(s)."
         return result, summary
 
+    if query_type == "material_serial_number":
+        material = args.get("material") or args.get("material_number")
+        result = query_material_serial_numbers(
+            material=material, plant=args.get("plant"), serial_number=args.get("serial_number")
+        )
+        summary = (
+            f"Found {result['count']} serial number record(s) for material {material}."
+            if result["results"]
+            else f"No serial number records found for material {material}."
+        )
+        return result, summary
+
     # default: material_stock
     material = args.get("material") or args.get("material_number")
     result = query_material_stock(material=material, plant=args.get("plant"))
@@ -112,9 +144,19 @@ class QueryAgentExecutor(AgentExecutor):
 
         if args is not None:
             query_type = args.get("query_type", "material_stock")
+            if query_type not in VALID_QUERY_TYPES:
+                await event_queue.enqueue_event(
+                    build_response_message(
+                        context,
+                        f"Unknown query_type '{query_type}', expected one of {sorted(VALID_QUERY_TYPES)}.",
+                        {"error": "unknown_query_type"},
+                    )
+                )
+                return
+
             required_field = {"material_master": "product", "production_order": None}.get(query_type, "material")
-            identifier_present = any(
-                args.get(key) for key in ("product", "material", "material_number", "production_order")
+            identifier_present = bool(
+                required_field and (args.get(required_field) or args.get("material_number"))
             )
             if required_field and not identifier_present:
                 await event_queue.enqueue_event(

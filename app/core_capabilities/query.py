@@ -14,7 +14,7 @@ from app.core_capabilities._s4_apis import (
     PRODUCTION_ORDER,
     PRODUCT_MASTER,
 )
-from app.services.odata_utils import extract_rows, strip_odata_noise
+from app.services.odata_utils import extract_rows, odata_literal, strip_odata_noise
 from app.services.s4_client import get_s4_client
 
 
@@ -29,7 +29,7 @@ def query_material_master(product: str) -> dict:
     """
     data = get_s4_client().get(
         PRODUCT_MASTER.path,
-        params={"$filter": f"Product eq '{product}'", "$expand": "to_Description"},
+        params={"$filter": f"Product eq '{odata_literal(product)}'", "$expand": "to_Description"},
     )
     rows = extract_rows(data)
     for row in rows:
@@ -57,7 +57,7 @@ def query_material_stock(material: str, plant: str | None = None) -> dict:
     are flattened into one row per line item and plant filtering happens
     client-side over that nested collection instead of via $filter.
     """
-    params = {"$filter": f"Material eq '{material}'", "$expand": "to_MatlStkInAcctMod"}
+    params = {"$filter": f"Material eq '{odata_literal(material)}'", "$expand": "to_MatlStkInAcctMod"}
     data = get_s4_client().get(MATERIAL_STOCK.path, params=params)
     rows = flatten_stock_rows(extract_rows(data), plant)
     return {"material": material, "plant": plant, "results": rows, "count": len(rows)}
@@ -93,11 +93,11 @@ def query_production_order(
     """COOIS - production order info, filterable by order/material/plant."""
     filters = []
     if production_order:
-        filters.append(f"ProductionOrder eq '{production_order}'")
+        filters.append(f"ProductionOrder eq '{odata_literal(production_order)}'")
     if material:
-        filters.append(f"Material eq '{material}'")
+        filters.append(f"Material eq '{odata_literal(material)}'")
     if plant:
-        filters.append(f"Plant eq '{plant}'")
+        filters.append(f"Plant eq '{odata_literal(plant)}'")
     params = {"$filter": " and ".join(filters)} if filters else None
     data = get_s4_client().get(PRODUCTION_ORDER.path, params=params)
     rows = extract_rows(data)
@@ -116,11 +116,11 @@ def query_material_serial_numbers(
     serial_number: str | None = None,
 ) -> dict:
     """MMBE (serialized stock) - stock broken down by serial number/equipment."""
-    filters = [f"Material eq '{material}'"]
+    filters = [f"Material eq '{odata_literal(material)}'"]
     if plant:
-        filters.append(f"Plant eq '{plant}'")
+        filters.append(f"Plant eq '{odata_literal(plant)}'")
     if serial_number:
-        filters.append(f"SerialNumber eq '{serial_number}'")
+        filters.append(f"SerialNumber eq '{odata_literal(serial_number)}'")
     data = get_s4_client().get(MATERIAL_SERIAL_NUMBER.path, params={"$filter": " and ".join(filters)})
     rows = extract_rows(data)
     return {

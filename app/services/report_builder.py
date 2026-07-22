@@ -68,8 +68,10 @@ class ReportBuilder:
         token = secrets.token_urlsafe(16)
         filename = f"{base_filename}.{report_format}"
         ttl = get_settings().report_download_ttl_seconds
+        now = time.time()
         with self._lock:
-            self._storage[token] = (content, filename, _CONTENT_TYPES[report_format], time.time() + ttl)
+            self._evict_expired(now)
+            self._storage[token] = (content, filename, _CONTENT_TYPES[report_format], now + ttl)
 
         download_url = f"{get_settings().app_public_url}/reports/download/{token}"
         return {"token": token, "filename": filename, "download_url": download_url}
@@ -81,6 +83,14 @@ class ReportBuilder:
                 self._storage.pop(token, None)
                 raise ReportNotFoundError(f"No report found for token '{token}' (expired or never existed)")
             return entry[0], entry[1], entry[2]
+
+    def _evict_expired(self, now: float) -> None:
+        """Sweeps tokens whose TTL has passed, whether or not anyone ever
+        downloaded them - get() alone only reclaims a token that's looked up
+        again after expiry, which never happens for an abandoned report."""
+        expired = [token for token, entry in self._storage.items() if entry[3] < now]
+        for token in expired:
+            del self._storage[token]
 
     @staticmethod
     def _to_csv(rows: list[dict]) -> bytes:

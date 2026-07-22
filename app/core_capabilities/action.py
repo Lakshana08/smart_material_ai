@@ -34,6 +34,7 @@ ETag being exposed, add headers={"If-Match": "*"} to the mutate call.
   (omitting Product) are not handled here.
 """
 
+from app.services.odata_utils import odata_literal
 from app.services.s4_client import S4ClientError, get_s4_client
 
 _PRODUCT_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_Product"
@@ -54,7 +55,7 @@ def perform_material_action(material_number: str, action: str, payload: dict | N
         if not status:
             raise ValueError("update_status requires payload.status (the new CrossPlantStatus code)")
         client = get_s4_client()
-        client.patch(f"{_PRODUCT_PATH}('{material_number}')", json_body={"CrossPlantStatus": status})
+        client.patch(f"{_PRODUCT_PATH}('{odata_literal(material_number)}')", json_body={"CrossPlantStatus": status})
         return {"status": "ok", "material_number": material_number, "action": action, "new_status": status}
 
     if action == "update_description":
@@ -65,7 +66,8 @@ def perform_material_action(material_number: str, action: str, payload: dict | N
         client = get_s4_client()
         try:
             client.patch(
-                f"{_PRODUCT_DESCRIPTION_PATH}(Product='{material_number}',Language='{language}')",
+                f"{_PRODUCT_DESCRIPTION_PATH}(Product='{odata_literal(material_number)}',"
+                f"Language='{odata_literal(language)}')",
                 json_body={"ProductDescription": description},
             )
         except S4ClientError as exc:
@@ -128,7 +130,10 @@ def perform_material_action(material_number: str, action: str, payload: dict | N
     if action == "delete_description":
         language = payload.get("language", _DEFAULT_LANGUAGE)
         client = get_s4_client()
-        client.delete(f"{_PRODUCT_DESCRIPTION_PATH}(Product='{material_number}',Language='{language}')")
+        client.delete(
+            f"{_PRODUCT_DESCRIPTION_PATH}(Product='{odata_literal(material_number)}',"
+            f"Language='{odata_literal(language)}')"
+        )
         return {"status": "ok", "material_number": material_number, "action": action, "language": language}
 
     raise ValueError(

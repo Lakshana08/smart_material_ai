@@ -4,7 +4,7 @@ S/4 query sources (material master / material stock / production order).
 
 from app.core_capabilities._s4_apis import BY_NAME
 from app.core_capabilities.query import flatten_stock_rows
-from app.services.odata_utils import extract_rows
+from app.services.odata_utils import extract_rows, odata_literal
 from app.services.report_builder import get_report_builder
 from app.services.s4_client import get_s4_client
 
@@ -38,15 +38,17 @@ def _fetch_report_rows(report_type: str, identifiers: list[str] | None, plant: s
         # and flatten into real line-item rows instead.
         params = {"$expand": "to_MatlStkInAcctMod"}
         if identifiers:
-            params["$filter"] = " or ".join(f"Material eq '{i}'" for i in identifiers)
+            params["$filter"] = " or ".join(f"Material eq '{odata_literal(i)}'" for i in identifiers)
         data = get_s4_client().get(api.path, params=params)
         return flatten_stock_rows(extract_rows(data), plant)
 
     filters = []
     if identifiers:
-        filters.append(" or ".join(f"{api.key_field} eq '{identifier}'" for identifier in identifiers))
+        filters.append(
+            " or ".join(f"{api.key_field} eq '{odata_literal(identifier)}'" for identifier in identifiers)
+        )
     if plant and api.has_plant_field:
-        filters.append(f"Plant eq '{plant}'")
+        filters.append(f"Plant eq '{odata_literal(plant)}'")
     params = {"$filter": " and ".join(f"({f})" for f in filters)} if filters else None
     data = get_s4_client().get(api.path, params=params)
     return extract_rows(data)

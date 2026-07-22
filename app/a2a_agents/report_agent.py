@@ -36,9 +36,9 @@ SKILL = AgentSkill(
 @tool
 def generate_report(report_type: str = "material_stock", identifiers: str = "", plant: str = "", report_format: str = "pdf") -> dict:
     """Generate a downloadable report of S/4HANA data. report_type is one of
-    'material_stock', 'material_master', 'production_order'. identifiers is a
-    comma-separated list of material/product/production-order numbers to scope
-    the report to (leave empty for all). report_format is 'pdf', 'xlsx', or 'csv'."""
+    'material_master', 'material_serial_number', 'material_stock', 'production_order'.
+    identifiers is a comma-separated list of material/product/production-order numbers
+    to scope the report to (leave empty for all). report_format is 'pdf', 'xlsx', or 'csv'."""
     id_list = [i.strip() for i in identifiers.split(",") if i.strip()] or None
     return generate_material_report(
         report_type=report_type, identifiers=id_list, plant=plant or None, report_format=report_format

@@ -62,7 +62,10 @@ class S4Client:
             return requests.request(method, self._url(resolved, path), json=json_body, **kwargs)
 
         resp = attempt()
-        if resp.status_code == 403 and "csrf" in resp.headers.get("X-CSRF-Token", "").lower():
+        # SAP Gateway's actual signal for a rejected/expired CSRF token is the
+        # literal header value "Required" on the 403 response - it never
+        # contains the substring "csrf", so check for that instead.
+        if resp.status_code == 403 and resp.headers.get("X-CSRF-Token", "").lower() == "required":
             self._csrf_token = None
             self._ensure_csrf_token(resolved, path)
             resp = attempt()

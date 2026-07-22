@@ -89,7 +89,9 @@ def check_aging(material: str = "", storage_location: str = "") -> dict:
     (fixed threshold). Optionally scoped by material and/or storage_location -
     but a broad call with NO arguments is valid for questions like "show aged
     inventory"; it returns up to 50 matching records plus the true total count
-    (truncated=true if more exist)."""
+    (truncated=true if more exist). Rows with no Aging Days value in the source
+    data (aging_days_unknown=true) are conservatively included as aged rather
+    than silently dropped, since their true age can't be confirmed."""
     return query_aging(material=material or None, storage_location=storage_location or None)
 
 
@@ -164,6 +166,13 @@ def _has_review_candidates(tool_outputs: list) -> bool:
     )
 
 
+def _has_unknown_aging(tool_outputs: list) -> bool:
+    return any(
+        isinstance(output, dict) and any(row.get("aging_days_unknown") for row in output.get("results", []))
+        for output in tool_outputs
+    )
+
+
 class StatusAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         args = get_structured_input(context)
@@ -194,6 +203,13 @@ class StatusAgentExecutor(AgentExecutor):
             answer += (
                 "\n\nNote: this includes machine-head candidates flagged for human review, "
                 "not a resolved status."
+            )
+        if _has_unknown_aging(tool_outputs):
+            # Forced server-side for the same reason - a row with no Aging Days
+            # value in the source data must not read as a confirmed 14+ day age.
+            answer += (
+                "\n\nNote: some results have no Aging Days value in the source data - they're "
+                "conservatively included as aged pending verification, not a confirmed age."
             )
 
         data = {"tool_results": tool_outputs} if tool_outputs else None

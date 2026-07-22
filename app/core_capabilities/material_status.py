@@ -73,5 +73,6 @@ def query_aging(
 def query_machine_head_candidates(*, order_type: str = "ZNPC", limit: int = DEFAULT_RESULT_LIMIT) -> dict:
     work_orders = load_order_master()
     components = load_component_issuance()
-    results = compute_machine_head_candidates(work_orders, components, order_type=order_type)
+    order_status = load_order_status()
+    results = compute_machine_head_candidates(work_orders, components, order_status, order_type=order_type)
     return _cap(results, limit)
