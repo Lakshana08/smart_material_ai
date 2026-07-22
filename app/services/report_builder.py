@@ -17,7 +17,7 @@ from openpyxl import Workbook
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.core.config import get_settings
 
@@ -28,6 +28,22 @@ _CONTENT_TYPES = {
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "pdf": "application/pdf",
 }
+
+# Below this width, ReportLab's Paragraph can't wrap even a short word at the
+# report's 7pt font - instead of raising, its wrap algorithm returns a bogus,
+# enormous height that blows up doc.build(). Wide tables (e.g. material
+# master's ~69 raw OData fields) are split into column chunks that each stay
+# above this floor rather than cramming every column onto one page.
+_MIN_COL_WIDTH = 45
+
+_TABLE_STYLE = TableStyle(
+    [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0a6ed1")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]
+)
 
 
 class ReportNotFoundError(Exception):
@@ -102,28 +118,29 @@ class ReportBuilder:
         cell_style.fontSize = 7
         cell_style.leading = 9
 
+        flowables = []
         if rows:
             headers = list(rows[0].keys())
             available_width = page_size[0] - doc.leftMargin - doc.rightMargin
-            col_width = available_width / len(headers)
-            data = [[Paragraph(str(h), cell_style) for h in headers]]
-            for row in rows:
-                data.append([Paragraph(str(row.get(h, "")), cell_style) for h in headers])
-            table = Table(data, colWidths=[col_width] * len(headers), repeatRows=1)
+            max_cols_per_chunk = max(1, int(available_width // _MIN_COL_WIDTH))
+
+            for chunk_start in range(0, len(headers), max_cols_per_chunk):
+                chunk_headers = headers[chunk_start : chunk_start + max_cols_per_chunk]
+                col_width = available_width / len(chunk_headers)
+                data = [[Paragraph(str(h), cell_style) for h in chunk_headers]]
+                for row in rows:
+                    data.append([Paragraph(str(row.get(h, "")), cell_style) for h in chunk_headers])
+                table = Table(data, colWidths=[col_width] * len(chunk_headers), repeatRows=1)
+                table.setStyle(_TABLE_STYLE)
+                flowables.append(table)
+                if chunk_start + max_cols_per_chunk < len(headers):
+                    flowables.append(Spacer(1, 12))
         else:
             table = Table([["No data"]])
+            table.setStyle(_TABLE_STYLE)
+            flowables.append(table)
 
-        table.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0a6ed1")),
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ]
-            )
-        )
-        doc.build([table])
+        doc.build(flowables)
         return buffer.getvalue()
 
 
