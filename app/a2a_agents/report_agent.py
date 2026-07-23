@@ -4,7 +4,7 @@ from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.types import AgentSkill
 
-from app.a2a_agents.common import build_agent_card, build_response_message, get_structured_input
+from app.a2a_agents.common import build_agent_card, emit_response, get_structured_input
 from app.core_capabilities._s4_apis import BY_NAME
 from app.core_capabilities.report import generate_material_report
 from app.services.ai_core import run_agent
@@ -78,22 +78,20 @@ class ReportAgentExecutor(AgentExecutor):
             report_format = args.get("report_format", "pdf")
 
             if report_type not in BY_NAME:
-                await event_queue.enqueue_event(
-                    build_response_message(
-                        context,
-                        f"Unknown report_type '{report_type}', expected one of {sorted(BY_NAME)}.",
-                        {"error": "unknown_report_type"},
-                    )
+                await emit_response(
+                    event_queue,
+                    context,
+                    f"Unknown report_type '{report_type}', expected one of {sorted(BY_NAME)}.",
+                    {"error": "unknown_report_type"},
                 )
                 return
 
             if report_format not in SUPPORTED_FORMATS:
-                await event_queue.enqueue_event(
-                    build_response_message(
-                        context,
-                        f"Unsupported report_format '{report_format}', expected one of {sorted(SUPPORTED_FORMATS)}.",
-                        {"error": "unsupported_format"},
-                    )
+                await emit_response(
+                    event_queue,
+                    context,
+                    f"Unsupported report_format '{report_format}', expected one of {sorted(SUPPORTED_FORMATS)}.",
+                    {"error": "unsupported_format"},
                 )
                 return
 
@@ -102,25 +100,24 @@ class ReportAgentExecutor(AgentExecutor):
                     report_type=report_type, identifiers=identifiers, plant=plant, report_format=report_format
                 )
             except S4ClientError as exc:
-                await event_queue.enqueue_event(
-                    build_response_message(context, f"Couldn't build report from S/4HANA data: {exc}", {"error": "s4_error"})
+                await emit_response(
+                    event_queue, context, f"Couldn't build report from S/4HANA data: {exc}", {"error": "s4_error"}
                 )
                 return
 
             summary = f"Report ready ({result['row_count']} rows): {result['download_url']}"
-            await event_queue.enqueue_event(build_response_message(context, summary, result))
+            await emit_response(event_queue, context, summary, result)
             return
 
         # Free text - let the AI Core tool-calling agent decide what to call.
         text = context.get_user_input()
         agent_result = await run_agent(_AGENT_SYSTEM_PROMPT, _TOOLS, text)
         if agent_result is None:
-            await event_queue.enqueue_event(
-                build_response_message(
-                    context,
-                    "I couldn't process that request right now (AI Core unavailable).",
-                    {"error": "ai_core_unavailable"},
-                )
+            await emit_response(
+                event_queue,
+                context,
+                "I couldn't process that request right now (AI Core unavailable).",
+                {"error": "ai_core_unavailable"},
             )
             return
 
@@ -128,7 +125,7 @@ class ReportAgentExecutor(AgentExecutor):
         download_url = next((t.get("download_url") for t in tool_outputs if isinstance(t, dict) and t.get("download_url")), None)
         final_text = f"{answer} {download_url}" if download_url else answer
         data = {"tool_results": tool_outputs} if tool_outputs else None
-        await event_queue.enqueue_event(build_response_message(context, final_text, data))
+        await emit_response(event_queue, context, final_text, data)
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         return None

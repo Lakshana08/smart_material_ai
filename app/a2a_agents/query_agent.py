@@ -4,7 +4,7 @@ from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.types import AgentSkill
 
-from app.a2a_agents.common import build_agent_card, build_response_message, get_structured_input
+from app.a2a_agents.common import build_agent_card, emit_response, get_structured_input
 from app.core_capabilities.query import query_material_master, query_material_stock, query_production_order
 from app.services.ai_core import run_agent
 from app.services.s4_client import S4ClientError
@@ -117,42 +117,38 @@ class QueryAgentExecutor(AgentExecutor):
                 args.get(key) for key in ("product", "material", "material_number", "production_order")
             )
             if required_field and not identifier_present:
-                await event_queue.enqueue_event(
-                    build_response_message(
-                        context,
-                        f"I need a '{required_field}' to run a {query_type} lookup.",
-                        {"error": "missing_required_field", "query_type": query_type},
-                    )
+                await emit_response(
+                    event_queue,
+                    context,
+                    f"I need a '{required_field}' to run a {query_type} lookup.",
+                    {"error": "missing_required_field", "query_type": query_type},
                 )
                 return
 
             try:
                 result, summary = _run_structured_query(args)
             except S4ClientError as exc:
-                await event_queue.enqueue_event(
-                    build_response_message(context, f"Couldn't reach S/4HANA: {exc}", {"error": "s4_error"})
-                )
+                await emit_response(event_queue, context, f"Couldn't reach S/4HANA: {exc}", {"error": "s4_error"})
                 return
 
-            await event_queue.enqueue_event(build_response_message(context, summary, result))
+            await emit_response(event_queue, context, summary, result)
             return
 
         # Free text - let the AI Core tool-calling agent decide what to call.
         text = context.get_user_input()
         agent_result = await run_agent(_AGENT_SYSTEM_PROMPT, _TOOLS, text)
         if agent_result is None:
-            await event_queue.enqueue_event(
-                build_response_message(
-                    context,
-                    "I couldn't process that request right now (AI Core unavailable).",
-                    {"error": "ai_core_unavailable"},
-                )
+            await emit_response(
+                event_queue,
+                context,
+                "I couldn't process that request right now (AI Core unavailable).",
+                {"error": "ai_core_unavailable"},
             )
             return
 
         answer, tool_outputs = agent_result
         data = {"tool_results": tool_outputs} if tool_outputs else None
-        await event_queue.enqueue_event(build_response_message(context, answer, data))
+        await emit_response(event_queue, context, answer, data)
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         # Single-shot synchronous lookups - nothing runs long enough to cancel mid-flight.

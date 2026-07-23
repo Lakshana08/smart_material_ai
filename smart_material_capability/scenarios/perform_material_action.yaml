@@ -1,0 +1,11 @@
+description: >-
+  Creates, updates, or deletes material master fields in S/4HANA. Use when
+  the user wants to change a material's status, update or delete a
+  material's description, or create a brand new material master record.
+  Example phrasings: "change the status of material TG20 to Z1", "update
+  the description of material TG20 to 'Trade Item 20'", "create a new
+  material TG99, type FERT, industry sector M, base unit EA", "delete the
+  German description of material TG20".
+target:
+  name: performmaterialaction
+  type: function

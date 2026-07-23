@@ -1,0 +1,21 @@
+action_groups:
+  - actions:
+      - type: agent-request
+        system_alias: SMART_MATERIAL_ACTION
+        agent_type: remote
+        result_variable: agentResult
+      # agentResult.body is already the unwrapped Task (no extra .result
+      # envelope layer). Root cause of every prior failure: the agent used to
+      # enqueue a submitted Task then a separate completed status update -
+      # Joule's agent-request captured the submitted event (status={state:
+      # submitted}, no message at all) before the completed update applied.
+      # The agent now enqueues a single already-completed Task, so
+      # status.message is always present here.
+      - type: set-variables
+        variables:
+          - name: replyText
+            value: <? agentResult.body.status.message.parts[0].text ?>
+      - type: message
+        message:
+          type: text
+          content: "<? replyText ?>"

@@ -1,0 +1,10 @@
+description: >-
+  Looks up material master data, stock levels, and production order status
+  in S/4HANA. Use when the user asks about the stock for a material, wants
+  material master details for a product, or wants to check the status of a
+  production order. Example phrasings: "what's the stock for material
+  MAT-1000?", "look up material master data for product MAT-2000", "show me
+  production order 60001234".
+target:
+  name: querymaterialfunction
+  type: function

@@ -1,0 +1,5 @@
+schema_version: 1.2.0
+name: smart_material_test
+capabilities:
+  - type: local
+    folder: ./
