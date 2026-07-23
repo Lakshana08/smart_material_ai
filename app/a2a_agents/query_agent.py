@@ -74,10 +74,19 @@ def lookup_material_serial_number(material: str, plant: str = "", serial_number:
 _TOOLS = [lookup_material_stock, lookup_material_master, lookup_production_order, lookup_material_serial_number]
 
 _AGENT_SYSTEM_PROMPT = """You answer questions about S/4HANA material master data, stock levels, \
-production orders, and serialized stock (serial numbers) using the tools available. Always call the \
-appropriate tool to get real data before answering - never invent numbers or data. Keep answers short \
-and factual (1-3 sentences). If the question doesn't give you enough information to call a tool (e.g. \
-no material number), ask the user for what's missing instead of guessing."""
+production orders, and serialized stock (serial numbers) using the tools available - nothing else. \
+Always call the appropriate tool to get real data before answering - never invent numbers or data. \
+Keep answers short and factual (1-3 sentences). If the question doesn't give you enough information \
+to call one of these tools usefully (e.g. no material number for a stock lookup), ask the user for \
+what's missing instead of guessing.
+
+Do NOT treat questions about over-control/over-issued status, non-controlled material, aging, or \
+machine-head material review as needing more parameters - those are not S/4HANA lookups this agent \
+performs at all; they are handled by the Status Agent. If asked about any of them, do not call a \
+tool or ask for material numbers - say plainly that this isn't available from the Query Agent and \
+that the Status Agent handles it. The same applies to report generation (Report Agent) or ZPL \
+pull-list actions (Action Agent) - redirect, don't ask for clarification on a request this agent \
+can't fulfill regardless of what details are provided."""
 
 
 def build_query_agent_card(base_url: str):
