@@ -8,7 +8,7 @@ from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.types import AgentSkill
 
-from app.a2a_agents.common import build_agent_card, build_response_message, get_structured_input
+from app.a2a_agents.common import build_agent_card, emit_response, get_structured_input
 from app.core_capabilities.material_status import (
     query_aging,
     query_machine_head_candidates,
@@ -167,7 +167,7 @@ class StatusAgentExecutor(AgentExecutor):
 
         if args is not None:
             result, summary = _run_structured_check(args)
-            await event_queue.enqueue_event(build_response_message(context, summary, result))
+            await emit_response(event_queue, context, summary, result)
             return
 
         # Free text - the LLM decides which tool(s) to call and narrates the
@@ -175,12 +175,11 @@ class StatusAgentExecutor(AgentExecutor):
         text = context.get_user_input()
         agent_result = await run_agent(_AGENT_SYSTEM_PROMPT, _TOOLS, text)
         if agent_result is None:
-            await event_queue.enqueue_event(
-                build_response_message(
-                    context,
-                    "I couldn't process that request right now (AI Core unavailable).",
-                    {"error": "ai_core_unavailable"},
-                )
+            await emit_response(
+                event_queue,
+                context,
+                "I couldn't process that request right now (AI Core unavailable).",
+                {"error": "ai_core_unavailable"},
             )
             return
 
@@ -201,7 +200,7 @@ class StatusAgentExecutor(AgentExecutor):
             )
 
         data = {"tool_results": tool_outputs} if tool_outputs else None
-        await event_queue.enqueue_event(build_response_message(context, answer, data))
+        await emit_response(event_queue, context, answer, data)
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         # Single-shot synchronous lookups - nothing runs long enough to cancel mid-flight.
