@@ -80,13 +80,11 @@ Keep answers short and factual (1-3 sentences). If the question doesn't give you
 to call one of these tools usefully (e.g. no material number for a stock lookup), ask the user for \
 what's missing instead of guessing.
 
-Do NOT treat questions about over-control/over-issued status, non-controlled material, aging, or \
-machine-head material review as needing more parameters - those are not S/4HANA lookups this agent \
-performs at all; they are handled by the Status Agent. If asked about any of them, do not call a \
-tool or ask for material numbers - say plainly that this isn't available from the Query Agent and \
-that the Status Agent handles it. The same applies to report generation (Report Agent) or ZPL \
-pull-list actions (Action Agent) - redirect, don't ask for clarification on a request this agent \
-can't fulfill regardless of what details are provided."""
+Do NOT treat questions about over-control/over-issued status, non-controlled material, aging, \
+machine-head material review, report generation, or ZPL pull-list actions as needing more parameters \
+- those are not S/4HANA lookups this agent performs at all. If asked about any of them, do not call \
+a tool or ask for material numbers - just say plainly that this isn't available from the Query Agent. \
+Do not name any other agent or say who handles it."""
 
 
 def build_query_agent_card(base_url: str):

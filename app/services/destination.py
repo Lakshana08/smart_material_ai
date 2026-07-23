@@ -1,20 +1,7 @@
 """Resolves an SAP BTP Destination and, for on-premise destinations, the
-Connectivity service proxy needed to reach it through Cloud Connector.
-
-Pattern: read service credentials from VCAP_SERVICES, get an OAuth token
-from the destination service's own UAA, call the Destination Configuration
-API to resolve the target system, and - if ProxyType is OnPremise - get a
-second token from the Connectivity service's UAA to use as the
-Proxy-Authorization header.
-
-This is deliberately auth-type-agnostic: BasicAuthentication and
-NoAuthentication destinations "just work" once resolved, because the
-destination response already carries what's needed. PrincipalPropagation
-is the one exception - it requires forwarding an end-user SAP identity
-token that these A2A agents don't currently receive, so it's left as an
-explicit NotImplementedError with guidance rather than silently behaving
-like NoAuthentication.
-"""
+Connectivity proxy needed to reach it through Cloud Connector.
+PrincipalPropagation isn't supported (raises NotImplementedError) - these
+agents don't receive an end-user SAP identity token to forward."""
 
 import threading
 import time

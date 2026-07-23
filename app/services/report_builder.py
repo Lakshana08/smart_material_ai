@@ -1,11 +1,6 @@
-"""Builds a downloadable report (PDF/Excel/CSV) from tabular S/4 data and
-holds it in a short-lived, token-keyed store.
-
-A2A task responses carry text/data parts, not binary attachments, so
-report_agent.py calls `build()` and puts only the returned download_url in
-its response message; a user clicks the link, which hits the
-/reports/download/{token} route and streams the file back via `get()`.
-"""
+"""Builds a downloadable report (PDF/Excel/CSV) and holds it in a
+short-lived, token-keyed store - A2A responses carry a download_url, not
+the file itself; /reports/download/{token} streams it back via get()."""
 
 import csv
 import io
@@ -29,11 +24,8 @@ _CONTENT_TYPES = {
     "pdf": "application/pdf",
 }
 
-# Below this width, ReportLab's Paragraph can't wrap even a short word at the
-# report's 7pt font - instead of raising, its wrap algorithm returns a bogus,
-# enormous height that blows up doc.build(). Wide tables (e.g. material
-# master's ~69 raw OData fields) are split into column chunks that each stay
-# above this floor rather than cramming every column onto one page.
+# Below this width, ReportLab's Paragraph wrap breaks and blows up doc.build() -
+# wide tables are split into column chunks that each stay above this floor.
 _MIN_COL_WIDTH = 45
 
 _TABLE_STYLE = TableStyle(
@@ -116,10 +108,8 @@ class ReportBuilder:
 
     @staticmethod
     def _to_pdf(rows: list[dict]) -> bytes:
-        # Landscape + explicit even colWidths + Paragraph-wrapped cells:
-        # S/4 tables commonly have 10+ columns (e.g. material_stock has 13),
-        # which overflows a portrait page with ReportLab's default
-        # auto-sized Table - cells get clipped/cut off rather than wrapping.
+        # Landscape + even colWidths + wrapped cells - S/4 tables often have
+        # 10+ columns, which clips/cuts off with ReportLab's default sizing.
         buffer = io.BytesIO()
         page_size = landscape(A4)
         doc = SimpleDocTemplate(buffer, pagesize=page_size, leftMargin=18, rightMargin=18, topMargin=18, bottomMargin=18)

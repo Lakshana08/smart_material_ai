@@ -1,10 +1,6 @@
-"""Reads the four raw SAP report exports in sample_data/ into plain lists of
-dicts, one per row, keyed by each sheet's real column headers.
-
-No pandas - openpyxl only (already in requirements.txt), since this is the
-only place in the engine that touches a file at all. Everything downstream
-(app/engine/*.py rule functions) works on plain lists/dicts.
-"""
+"""Reads the four raw SAP report exports in sample_data/ into plain lists
+of dicts, keyed by each sheet's real column headers. openpyxl only, no
+pandas - the only place in the engine that touches a file at all."""
 
 import os
 
@@ -30,12 +26,8 @@ def load_order_master() -> list[dict]:
 
 
 def load_component_issuance() -> list[dict]:
-    """RAW_14C_ComponentIssuance.xlsx - component issuance / theoretical vs
-    actual usage (14C). Columns K and L in the source sheet are both
-    literally named 'B' (a real export quirk); neither is read by any rule,
-    so dict(zip(header, row)) silently keeping only the last 'B' value is
-    harmless here.
-    """
+    """RAW_14C_ComponentIssuance.xlsx (14C). Columns K/L are both literally
+    named 'B' in the source (export quirk) - neither is used, so harmless."""
     return _read_sheet("RAW_14C_ComponentIssuance.xlsx", "Component Issuance (14C)")
 
 

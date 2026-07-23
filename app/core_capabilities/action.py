@@ -1,38 +1,12 @@
-"""Action capability: update material master fields in S/4HANA (T-code MM02),
-and create new material masters (T-code MM01).
-
-Two real, confirmed targets (checked live against API_PRODUCT_SRV, 2026-07-08):
-
-- "update_status" -> PATCH A_Product('<material>') - CrossPlantStatus lives
-  directly on A_Product, and this entity returns no ETag (neither an HTTP
-  ETag header nor a __metadata.etag), so no If-Match/concurrency handling
-  is needed for it.
-
-- "update_description" -> PATCH A_ProductDescription(Product='<material>',
-  Language='<lang>') - descriptions do NOT live on A_Product itself (it
-  only has a to_Description navigation property); this related entity has
-  its own composite key (Product + Language) and its own field
-  (ProductDescription). Confirmed live (2026-07-13) that most products only
-  carry descriptions for a handful of languages, not every language SAP
-  ships - PATCHing a Product/Language combo that was never maintained 404s
-  since PATCH only updates existing entities, so on a 404 this falls back
-  to POST A_ProductDescription to create that language variant instead.
-
-Both confirmed via live GETs, not guessed. NOT yet confirmed: an actual
-PATCH against an *existing* description has never been executed against
-this system - if the Gateway turns out to require If-Match despite no
-ETag being exposed, add headers={"If-Match": "*"} to the mutate call.
-
-- "create_material" -> POST A_Product, then (if a description was given) a
-  second POST A_ProductDescription. Two separate calls, not a deep insert:
-  confirmed live (2026-07-09) that this Gateway rejects a to_Description
-  deep insert on the A_Product POST with "API_PRD_MSG/003 - Cannot process
-  multiple products in a single change set request." Product/ProductType/
-  IndustrySector/BaseUnit are the fields SAP's own API_PRODUCT_SRV docs mark
-  mandatory for creation. Only external material number assignment is
-  supported (material_number is required) - internal number ranges
-  (omitting Product) are not handled here.
-"""
+"""Action capability: update/create material master fields in S/4HANA
+(MM01/MM02). update_status PATCHes CrossPlantStatus on A_Product directly
+(no ETag needed). update_description PATCHes the related A_ProductDescription
+entity (Product+Language key); on 404 (never maintained for that language)
+it falls back to POST to create that variant. create_material POSTs
+A_Product then, separately, A_ProductDescription - deep insert is rejected
+live by this Gateway ("cannot process multiple products in a single change
+set"). Only external material numbers (material_number required) are
+supported, not internal number ranges."""
 
 from app.services.odata_utils import odata_literal
 from app.services.s4_client import S4ClientError, get_s4_client

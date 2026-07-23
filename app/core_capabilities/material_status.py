@@ -1,12 +1,5 @@
-"""Business logic behind the Status Agent's four tools - Non-Controlled
-Material, Over-Control / Over-Issued Material, Aging, and Machine-Head
-Material Review (Technical Spec §6).
-
-Loads the four sample_data/ reports fresh on each call (Excel-only phase -
-no live-S4 adapter yet) and hands them to app/engine/*.py for computation.
-No LLM code anywhere in this file - these functions are called identically
-whether the caller is the structured-JSON path or a tool bound to the LLM.
-"""
+"""Bridges the Status Agent's tools to app/engine/*.py - loads sample_data/
+fresh on each call (Excel-only, no live-S4 adapter). No LLM code here."""
 
 from app.engine.aging import compute_aging
 from app.engine.loader import (
@@ -23,11 +16,8 @@ DEFAULT_RESULT_LIMIT = 50
 
 
 def _cap(results: list[dict], limit: int) -> dict:
-    """Broad/unscoped queries can legitimately match thousands of rows (e.g.
-    1,678 non-controlled records in the sample data) - dumping all of them
-    into a tool result would be a real cost/latency problem for the LLM path,
-    not just noise. count is always the TRUE total; results is capped so the
-    caller (human or LLM) always knows whether it's seeing everything."""
+    """Caps a broad/unscoped result (can be thousands of rows) - count is
+    always the true total, so callers know if they're seeing everything."""
     return {"count": len(results), "truncated": len(results) > limit, "results": results[:limit]}
 
 

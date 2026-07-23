@@ -1,6 +1,8 @@
-"""FastAPI entrypoint that hosts three independent A2A agents - one each for
-querying, acting on, and reporting on S/4HANA material data - plus a plain
-REST route for downloading generated report files.
+# Run: .venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+"""FastAPI entrypoint that hosts four independent A2A agents - querying,
+acting on, and reporting on live S/4HANA material data, plus evaluating
+business-rule status against sample_data/ - plus a plain REST route for
+downloading generated report files.
 
 Each agent is a separate A2A server (its own AgentCard/discovery endpoint,
 its own JSON-RPC endpoint) mounted at its own path prefix within this one
@@ -9,11 +11,11 @@ deployable app:
   /a2a/query   -> Material Query Agent   -> /.well-known/agent-card.json, /
   /a2a/action  -> Material Action Agent  -> /.well-known/agent-card.json, /
   /a2a/report  -> Material Report Agent  -> /.well-known/agent-card.json, /
+  /a2a/status  -> Status Agent           -> /.well-known/agent-card.json, /
 
 so a caller (e.g. a Joule Studio A2A code-based agent registration) sees
-three distinct agents at
+four distinct agents at
 http://<host>/a2a/query/.well-known/agent-card.json, etc.
-.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 """
 
 from dotenv import load_dotenv

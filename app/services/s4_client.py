@@ -1,12 +1,5 @@
-"""Generic OData v2/v4 client for the S/4HANA system resolved via
-DestinationService. Handles CSRF token fetch/retry for mutating calls
-(OData v2 requires this for POST/PATCH/DELETE) and injects the Connectivity
-proxy transparently when the destination is on-premise.
-
-The exact OData service/entity paths used by app/core_capabilities/*.py are
-placeholders pending the real S/4 API details - only the request/response
-plumbing below needs to be correct now.
-"""
+"""Generic OData v2/v4 client for S/4HANA - handles CSRF token fetch/retry
+for mutating calls and the on-premise Connectivity proxy transparently."""
 
 from typing import Any
 
@@ -78,14 +71,8 @@ class S4Client:
             return
         kwargs = self._base_kwargs(resolved)
         kwargs["headers"]["X-CSRF-Token"] = "Fetch"
-        # Fetch against the entity SET (key predicate stripped), not the exact
-        # keyed entity being mutated - the token isn't tied to a specific
-        # entity, and the keyed path 404s whenever that entity doesn't exist
-        # yet (e.g. PATCHing a Product/Language description combo that
-        # hasn't been created), which would otherwise block CSRF fetch for
-        # every subsequent POST/create fallback too. Must still be an actual
-        # service path, not the bare host root - GETting resolved.url alone
-        # 404s since there's no service mounted there.
+        # Fetch against the entity SET, not the keyed entity - the keyed path
+        # 404s if that entity doesn't exist yet (e.g. before a create).
         entity_set_path = path.split("(", 1)[0]
         resp = requests.get(self._url(resolved, entity_set_path), **kwargs)
         resp.raise_for_status()

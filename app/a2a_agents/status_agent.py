@@ -1,18 +1,6 @@
-"""Status Agent - the 4 deterministic material-status business rules
-(Technical Spec §6): Non-Controlled Material, Over-Control / Over-Issued
-Material, Aging, and Machine-Head Material Review.
-
-All business logic lives in app/core_capabilities/material_status.py and
-app/engine/*.py - none of it is LLM code. The LLM (via services/ai_core.py,
-already built for the other 3 agents) is used for exactly two things on the
-free-text path: deciding which tool(s) match the question, and turning the
-tool's structured result into a sentence. It never computes a rule - that
-happens entirely inside the tool functions below, before the LLM ever sees
-a number.
-
-Structured JSON callers (check_type + fields) skip the LLM entirely, same
-convention as query_agent.py / action_agent.py / report_agent.py.
-"""
+"""Status Agent - the 4 material-status business rules (Technical Spec §6).
+All logic lives in core_capabilities/material_status.py + engine/*.py, zero
+LLM code; the LLM only picks a tool and narrates its result, never computes."""
 
 from langchain_core.tools import tool
 

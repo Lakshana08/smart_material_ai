@@ -1,11 +1,6 @@
-"""Non-Controlled Material and Over-Control / Over-Issued Material rules
-(Technical Spec §6.1 / §6.2). Both come from the same Material+StorageLocation
-lookup, so one function computes both statuses - callers filter by status
-afterward (see core_capabilities/material_status.py).
-
-Pure Python, no LLM, no pandas - operates on the plain lists of dicts
-produced by engine/loader.py.
-"""
+"""Non-Controlled + Over-Control rules (Technical Spec §6.1/§6.2) - one
+shared Material+StorageLocation lookup; callers filter by status after.
+Pure Python, no LLM, no pandas."""
 
 from datetime import datetime, timezone
 

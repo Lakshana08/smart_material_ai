@@ -1,9 +1,5 @@
-"""Machine-Head Material (机头料) candidate-surfacing (Technical Spec §6.4).
-
-NOT a deterministic rule - this is a heuristic that surfaces candidates for
-human review only. Every returned row carries needs_review=True
-unconditionally; nothing here ever resolves a row to a confirmed status.
-"""
+"""Machine-Head Material (机头料) candidate-surfacing (Technical Spec §6.4) -
+a heuristic, not a rule. needs_review=True always; never a confirmed status."""
 
 from datetime import datetime, timezone
 

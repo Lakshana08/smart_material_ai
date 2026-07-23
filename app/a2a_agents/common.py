@@ -1,12 +1,6 @@
-"""Shared helpers for the three A2A agent executors.
-
-Input contract: if the caller sends a JSON DataPart matching the
-capability's parameter shape (e.g. a Joule Studio skill invocation with
-pre-extracted fields), dispatch directly to core_capabilities - no LLM
-involved. If the caller sends plain free text instead, route through
-services/ai_core.run_agent() with the capability's functions bound as
-LangChain tools, and let the model decide what to call.
-"""
+"""Shared helpers for the 4 A2A agent executors. Structured JSON dispatches
+straight to core_capabilities (no LLM); free text routes through
+services/ai_core.run_agent() with the capability functions as tools."""
 
 from typing import Any
 
@@ -17,10 +11,7 @@ from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, TransportProtocol
 
 
 def get_structured_input(context: RequestContext) -> dict[str, Any] | None:
-    """Returns the JSON DataPart if the caller sent one, else None - None
-    means the caller sent free text and should be routed through the AI
-    Core tool-calling agent instead.
-    """
+    """Returns the JSON DataPart if sent, else None (meaning: route as free text)."""
     data_parts = get_data_parts(context.message.parts)
     if data_parts and isinstance(data_parts[0], dict):
         return data_parts[0]
