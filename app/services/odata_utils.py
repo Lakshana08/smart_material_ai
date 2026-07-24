@@ -1,11 +1,14 @@
 from typing import Any
 
 
+def odata_literal(value: str) -> str:
+    """Escapes a value for a $filter string literal (OData doubles `'` as
+    `''`) - without this, a quote in the value can inject extra clauses."""
+    return value.replace("'", "''")
+
+
 def extract_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
-    """Normalizes OData v2 (`{"d": {"results": [...]}}`) and v4
-    (`{"value": [...]}`) response shapes into a plain list of rows, with
-    SAP's OData boilerplate stripped from each row.
-    """
+    """Normalizes OData v2/v4 response shapes into a plain list of rows."""
     if not isinstance(data, dict):
         return []
     if isinstance(data.get("d"), dict):
@@ -16,12 +19,8 @@ def extract_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def strip_odata_noise(row: dict[str, Any]) -> dict[str, Any]:
-    """Removes SAP OData boilerplate - the `__metadata` block and
-    unexpanded navigation-property `__deferred` stubs - leaving only real
-    business fields. These add no value once a response leaves the OData
-    layer (they're not followed further downstream) and roughly double
-    payload size on entities with several navigation properties.
-    """
+    """Strips SAP's `__metadata` and unexpanded `__deferred` nav-property
+    stubs, leaving only real business fields."""
     if not isinstance(row, dict):
         return row
     cleaned = {}

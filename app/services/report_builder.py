@@ -1,11 +1,6 @@
-"""Builds a downloadable report (PDF/Excel/CSV) from tabular S/4 data and
-holds it in a short-lived, token-keyed store.
-
-A2A task responses carry text/data parts, not binary attachments, so
-report_agent.py calls `build()` and puts only the returned download_url in
-its response message; a user clicks the link, which hits the
-/reports/download/{token} route and streams the file back via `get()`.
-"""
+"""Builds a downloadable report (PDF/Excel/CSV) and holds it in a
+short-lived, token-keyed store - A2A responses carry a download_url, not
+the file itself; /reports/download/{token} streams it back via get()."""
 
 import csv
 import io
@@ -17,7 +12,7 @@ from openpyxl import Workbook
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.core.config import get_settings
 
@@ -28,6 +23,19 @@ _CONTENT_TYPES = {
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "pdf": "application/pdf",
 }
+
+# Below this width, ReportLab's Paragraph wrap breaks and blows up doc.build() -
+# wide tables are split into column chunks that each stay above this floor.
+_MIN_COL_WIDTH = 45
+
+_TABLE_STYLE = TableStyle(
+    [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0a6ed1")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]
+)
 
 
 class ReportNotFoundError(Exception):
@@ -52,8 +60,10 @@ class ReportBuilder:
         token = secrets.token_urlsafe(16)
         filename = f"{base_filename}.{report_format}"
         ttl = get_settings().report_download_ttl_seconds
+        now = time.time()
         with self._lock:
-            self._storage[token] = (content, filename, _CONTENT_TYPES[report_format], time.time() + ttl)
+            self._evict_expired(now)
+            self._storage[token] = (content, filename, _CONTENT_TYPES[report_format], now + ttl)
 
         download_url = f"{get_settings().app_public_url}/reports/download/{token}"
         return {"token": token, "filename": filename, "download_url": download_url}
@@ -65,6 +75,14 @@ class ReportBuilder:
                 self._storage.pop(token, None)
                 raise ReportNotFoundError(f"No report found for token '{token}' (expired or never existed)")
             return entry[0], entry[1], entry[2]
+
+    def _evict_expired(self, now: float) -> None:
+        """Sweeps tokens whose TTL has passed, whether or not anyone ever
+        downloaded them - get() alone only reclaims a token that's looked up
+        again after expiry, which never happens for an abandoned report."""
+        expired = [token for token, entry in self._storage.items() if entry[3] < now]
+        for token in expired:
+            del self._storage[token]
 
     @staticmethod
     def _to_csv(rows: list[dict]) -> bytes:
@@ -90,10 +108,8 @@ class ReportBuilder:
 
     @staticmethod
     def _to_pdf(rows: list[dict]) -> bytes:
-        # Landscape + explicit even colWidths + Paragraph-wrapped cells:
-        # S/4 tables commonly have 10+ columns (e.g. material_stock has 13),
-        # which overflows a portrait page with ReportLab's default
-        # auto-sized Table - cells get clipped/cut off rather than wrapping.
+        # Landscape + even colWidths + wrapped cells - S/4 tables often have
+        # 10+ columns, which clips/cuts off with ReportLab's default sizing.
         buffer = io.BytesIO()
         page_size = landscape(A4)
         doc = SimpleDocTemplate(buffer, pagesize=page_size, leftMargin=18, rightMargin=18, topMargin=18, bottomMargin=18)
@@ -102,28 +118,29 @@ class ReportBuilder:
         cell_style.fontSize = 7
         cell_style.leading = 9
 
+        flowables = []
         if rows:
             headers = list(rows[0].keys())
             available_width = page_size[0] - doc.leftMargin - doc.rightMargin
-            col_width = available_width / len(headers)
-            data = [[Paragraph(str(h), cell_style) for h in headers]]
-            for row in rows:
-                data.append([Paragraph(str(row.get(h, "")), cell_style) for h in headers])
-            table = Table(data, colWidths=[col_width] * len(headers), repeatRows=1)
+            max_cols_per_chunk = max(1, int(available_width // _MIN_COL_WIDTH))
+
+            for chunk_start in range(0, len(headers), max_cols_per_chunk):
+                chunk_headers = headers[chunk_start : chunk_start + max_cols_per_chunk]
+                col_width = available_width / len(chunk_headers)
+                data = [[Paragraph(str(h), cell_style) for h in chunk_headers]]
+                for row in rows:
+                    data.append([Paragraph(str(row.get(h, "")), cell_style) for h in chunk_headers])
+                table = Table(data, colWidths=[col_width] * len(chunk_headers), repeatRows=1)
+                table.setStyle(_TABLE_STYLE)
+                flowables.append(table)
+                if chunk_start + max_cols_per_chunk < len(headers):
+                    flowables.append(Spacer(1, 12))
         else:
             table = Table([["No data"]])
+            table.setStyle(_TABLE_STYLE)
+            flowables.append(table)
 
-        table.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0a6ed1")),
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ]
-            )
-        )
-        doc.build([table])
+        doc.build(flowables)
         return buffer.getvalue()
 
 

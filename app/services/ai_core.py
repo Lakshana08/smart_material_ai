@@ -34,6 +34,7 @@ from typing import Any, Callable
 import httpx
 
 from app.core.config import get_settings
+from app.services.s4_client import S4ClientError
 
 logger = logging.getLogger(__name__)
 
@@ -120,13 +121,9 @@ def _build_llm():
 async def run_agent(
     system_prompt: str, tools: list[Callable[..., Any]], user_text: str
 ) -> tuple[str, list[Any]] | None:
-    """Runs a LangChain tool-calling agent over user_text with the given
-    tools bound. Returns (final_answer_text, raw_tool_outputs) - the second
-    element mirrors what the structured-JSON path returns as its data part,
-    so free-text and structured callers get comparably rich responses.
-    Returns None if AI Core is disabled or the call fails - callers should
-    fall back to requiring structured JSON input in that case, not crash.
-    """
+    """Runs one tool-calling turn; returns (answer_text, tool_outputs).
+    Returns None only if AI Core is disabled; on failure, returns the real
+    error as the answer text instead of a generic message."""
     settings = get_settings()
     if not settings.ai_core_enabled:
         return None
@@ -150,6 +147,10 @@ async def run_agent(
                     tool_outputs.append(message.content)
 
         return final_text, tool_outputs
-    except Exception:
-        logger.exception("AI Core agent execution failed")
-        return None
+    except S4ClientError as exc:
+        # A tool's S/4 call failed, not AI Core itself - logged distinctly.
+        logger.exception("AI Core agent's tool call failed against S/4HANA")
+        return f"S/4HANA error: {exc}", []
+    except Exception as exc:
+        logger.exception("AI Core agent execution failed (LLM call, tool-calling loop, or unexpected error)")
+        return f"AI Core error: {type(exc).__name__}: {exc}", []

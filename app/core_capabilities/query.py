@@ -1,12 +1,5 @@
-"""Query capability: read-only lookups against S/4HANA.
-
-Four real S/4 transactions are wired up, each behind its own function so
-the query agent can route explicitly rather than guessing:
-  - MM03 (material/product master)     -> query_material_master()
-  - MMBE (stock overview)              -> query_material_stock()
-  - COOIS (production order info)      -> query_production_order()
-  - MMBE (serialized stock)            -> query_material_serial_numbers()
-"""
+"""Query capability: read-only S/4HANA lookups - MM03 (material master),
+MMBE (stock, and serialized stock), COOIS (production order info)."""
 
 from app.core_capabilities._s4_apis import (
     MATERIAL_SERIAL_NUMBER,
@@ -14,22 +7,17 @@ from app.core_capabilities._s4_apis import (
     PRODUCTION_ORDER,
     PRODUCT_MASTER,
 )
-from app.services.odata_utils import extract_rows, strip_odata_noise
+from app.services.odata_utils import extract_rows, odata_literal, strip_odata_noise
 from app.services.s4_client import get_s4_client
 
 
 def query_material_master(product: str) -> dict:
-    """MM03 - material/product master data.
-
-    A_Product has no description field of its own (confirmed live,
-    2026-07-08) - descriptions live on the related A_ProductDescription
-    entity (keyed by Product + Language), reached via the to_Description
-    expand and normalized here into a plain "descriptions" list so callers
-    don't need to know about the nested OData shape.
-    """
+    """MM03 - material/product master data. Descriptions live on the
+    related A_ProductDescription entity, reached via to_Description and
+    flattened into a plain "descriptions" list here."""
     data = get_s4_client().get(
         PRODUCT_MASTER.path,
-        params={"$filter": f"Product eq '{product}'", "$expand": "to_Description"},
+        params={"$filter": f"Product eq '{odata_literal(product)}'", "$expand": "to_Description"},
     )
     rows = extract_rows(data)
     for row in rows:
@@ -38,8 +26,7 @@ def query_material_master(product: str) -> dict:
 
 
 def _clean_nested(nested) -> list[dict]:
-    """Normalizes an expanded OData v2 nav property ({"results": [...]})
-    into a plain list with each entry's __metadata/__deferred noise stripped."""
+    """Normalizes an expanded OData v2 nav property into a plain, cleaned list."""
     if isinstance(nested, dict):
         nested = nested.get("results", [])
     if not isinstance(nested, list):
@@ -48,27 +35,17 @@ def _clean_nested(nested) -> list[dict]:
 
 
 def query_material_stock(material: str, plant: str | None = None) -> dict:
-    """MMBE - stock overview, optionally scoped to a plant.
-
-    Plant isn't a top-level filter field on A_MaterialStock (confirmed via
-    a live 400 from this system: "Property Plant not found in type
-    A_MaterialStockType") - the per-plant/storage-location breakdown is
-    nested under the expanded to_MatlStkInAcctMod association, so results
-    are flattened into one row per line item and plant filtering happens
-    client-side over that nested collection instead of via $filter.
-    """
-    params = {"$filter": f"Material eq '{material}'", "$expand": "to_MatlStkInAcctMod"}
+    """MMBE - stock overview, optionally scoped to a plant. Plant isn't a
+    top-level $filter field, so results are flattened and filtered client-side."""
+    params = {"$filter": f"Material eq '{odata_literal(material)}'", "$expand": "to_MatlStkInAcctMod"}
     data = get_s4_client().get(MATERIAL_STOCK.path, params=params)
     rows = flatten_stock_rows(extract_rows(data), plant)
     return {"material": material, "plant": plant, "results": rows, "count": len(rows)}
 
 
 def flatten_stock_rows(rows: list[dict], plant: str | None = None) -> list[dict]:
-    """Flattens A_MaterialStock rows (with expanded to_MatlStkInAcctMod)
-    into one flat row per material/plant/storage-location line item,
-    optionally filtered to a single plant. Shared with report.py so a
-    material_stock report gets the same real line items as a query.
-    """
+    """Flattens A_MaterialStock rows into one row per plant/storage-location
+    line item, optionally filtered to a plant. Shared with report.py."""
     flattened = []
     for row in rows:
         nested = row.get("to_MatlStkInAcctMod")
@@ -93,11 +70,11 @@ def query_production_order(
     """COOIS - production order info, filterable by order/material/plant."""
     filters = []
     if production_order:
-        filters.append(f"ProductionOrder eq '{production_order}'")
+        filters.append(f"ProductionOrder eq '{odata_literal(production_order)}'")
     if material:
-        filters.append(f"Material eq '{material}'")
+        filters.append(f"Material eq '{odata_literal(material)}'")
     if plant:
-        filters.append(f"Plant eq '{plant}'")
+        filters.append(f"Plant eq '{odata_literal(plant)}'")
     params = {"$filter": " and ".join(filters)} if filters else None
     data = get_s4_client().get(PRODUCTION_ORDER.path, params=params)
     rows = extract_rows(data)
@@ -116,11 +93,11 @@ def query_material_serial_numbers(
     serial_number: str | None = None,
 ) -> dict:
     """MMBE (serialized stock) - stock broken down by serial number/equipment."""
-    filters = [f"Material eq '{material}'"]
+    filters = [f"Material eq '{odata_literal(material)}'"]
     if plant:
-        filters.append(f"Plant eq '{plant}'")
+        filters.append(f"Plant eq '{odata_literal(plant)}'")
     if serial_number:
-        filters.append(f"SerialNumber eq '{serial_number}'")
+        filters.append(f"SerialNumber eq '{odata_literal(serial_number)}'")
     data = get_s4_client().get(MATERIAL_SERIAL_NUMBER.path, params={"$filter": " and ".join(filters)})
     rows = extract_rows(data)
     return {

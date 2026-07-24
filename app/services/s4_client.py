@@ -1,12 +1,5 @@
-"""Generic OData v2/v4 client for the S/4HANA system resolved via
-DestinationService. Handles CSRF token fetch/retry for mutating calls
-(OData v2 requires this for POST/PATCH/DELETE) and injects the Connectivity
-proxy transparently when the destination is on-premise.
-
-The exact OData service/entity paths used by app/core_capabilities/*.py are
-placeholders pending the real S/4 API details - only the request/response
-plumbing below needs to be correct now.
-"""
+"""Generic OData v2/v4 client for S/4HANA - handles CSRF token fetch/retry
+for mutating calls and the on-premise Connectivity proxy transparently."""
 
 from typing import Any
 
@@ -62,7 +55,10 @@ class S4Client:
             return requests.request(method, self._url(resolved, path), json=json_body, **kwargs)
 
         resp = attempt()
-        if resp.status_code == 403 and "csrf" in resp.headers.get("X-CSRF-Token", "").lower():
+        # SAP Gateway's actual signal for a rejected/expired CSRF token is the
+        # literal header value "Required" on the 403 response - it never
+        # contains the substring "csrf", so check for that instead.
+        if resp.status_code == 403 and resp.headers.get("X-CSRF-Token", "").lower() == "required":
             self._csrf_token = None
             self._ensure_csrf_token(resolved, path)
             resp = attempt()

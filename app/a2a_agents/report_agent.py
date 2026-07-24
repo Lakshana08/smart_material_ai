@@ -36,9 +36,9 @@ SKILL = AgentSkill(
 @tool
 def generate_report(report_type: str = "material_stock", identifiers: str = "", plant: str = "", report_format: str = "pdf") -> dict:
     """Generate a downloadable report of S/4HANA data. report_type is one of
-    'material_stock', 'material_master', 'production_order'. identifiers is a
-    comma-separated list of material/product/production-order numbers to scope
-    the report to (leave empty for all). report_format is 'pdf', 'xlsx', or 'csv'."""
+    'material_master', 'material_serial_number', 'material_stock', 'production_order'.
+    identifiers is a comma-separated list of material/product/production-order numbers
+    to scope the report to (leave empty for all). report_format is 'pdf', 'xlsx', or 'csv'."""
     id_list = [i.strip() for i in identifiers.split(",") if i.strip()] or None
     return generate_material_report(
         report_type=report_type, identifiers=id_list, plant=plant or None, report_format=report_format
@@ -50,12 +50,25 @@ _TOOLS = [generate_report]
 # Deliberately tells the model NOT to state the download link itself - the
 # literal URL is always appended by the executor after the tool runs, so a
 # model paraphrasing/garbling it in its answer can't break the actual link.
+#
+# Deliberately does NOT say "default to X if unclear" - that previously made
+# the model silently generate an unfiltered material_stock report for
+# unrelated questions (e.g. "list out the aged material") and present it as
+# if it answered the question. Unclear/unrelated requests must now get a
+# plain "not available here" answer instead of a wrong report.
 _AGENT_SYSTEM_PROMPT = f"""You generate S/4HANA reports using the tool available. report_type must \
 be one of {sorted(BY_NAME)}; report_format must be one of {sorted(SUPPORTED_FORMATS)}. Infer both \
-from the user's wording (e.g. "stock" -> material_stock, "Excel" -> xlsx), defaulting to \
-material_stock/pdf if unclear. After calling the tool, briefly describe what was generated (e.g. \
-report type and row count) in one short sentence - do NOT include any URL or link in your answer, \
-that will be added separately."""
+from the user's wording (e.g. "stock" -> material_stock, "Excel" -> xlsx) ONLY when the request \
+clearly matches one of these report types.
+
+Do NOT guess or default when it doesn't clearly match. If the request is about something this agent \
+does not generate reports for - aging, non-controlled material, over-control/over-issued status, \
+machine-head review, a ZPL pull-list action, or anything unrelated to material/stock/production-order \
+reporting - do not call the tool at all. Just reply that this isn't available from the Report Agent. \
+Do not name any other agent or say who handles it.
+
+After calling the tool, briefly describe what was generated (e.g. report type and row count) in one \
+short sentence - do NOT include any URL or link in your answer, that will be added separately."""
 
 
 def build_report_agent_card(base_url: str):

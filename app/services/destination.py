@@ -1,20 +1,7 @@
 """Resolves an SAP BTP Destination and, for on-premise destinations, the
-Connectivity service proxy needed to reach it through Cloud Connector.
-
-Pattern: read service credentials from VCAP_SERVICES, get an OAuth token
-from the destination service's own UAA, call the Destination Configuration
-API to resolve the target system, and - if ProxyType is OnPremise - get a
-second token from the Connectivity service's UAA to use as the
-Proxy-Authorization header.
-
-This is deliberately auth-type-agnostic: BasicAuthentication and
-NoAuthentication destinations "just work" once resolved, because the
-destination response already carries what's needed. PrincipalPropagation
-is the one exception - it requires forwarding an end-user SAP identity
-token that these A2A agents don't currently receive, so it's left as an
-explicit NotImplementedError with guidance rather than silently behaving
-like NoAuthentication.
-"""
+Connectivity proxy needed to reach it through Cloud Connector.
+PrincipalPropagation isn't supported (raises NotImplementedError) - these
+agents don't receive an end-user SAP identity token to forward."""
 
 import threading
 import time
@@ -78,13 +65,18 @@ class DestinationService:
 
     def _static_destination(self) -> ResolvedDestination:
         settings = get_settings()
-        has_credentials = bool(settings.s4_username)
+        username, password = settings.s4_username, settings.s4_password
+        if bool(username) != bool(password):
+            raise RuntimeError(
+                "S4_USERNAME and S4_PASSWORD must both be set for BasicAuthentication, or both left "
+                "empty for NoAuthentication - only one of the two was provided."
+            )
         return ResolvedDestination(
             url=settings.s4_base_url,
             proxy_type="Internet",
-            authentication="BasicAuthentication" if has_credentials else "NoAuthentication",
-            username=settings.s4_username or None,
-            password=settings.s4_password or None,
+            authentication="BasicAuthentication" if username else "NoAuthentication",
+            username=username or None,
+            password=password or None,
         )
 
     def _resolve_live(self, destination_name: str) -> ResolvedDestination:
