@@ -16,6 +16,7 @@ deployable app:
 so a caller (e.g. a Joule Studio A2A code-based agent registration) sees
 four distinct agents at
 http://<host>/a2a/query/.well-known/agent-card.json, etc.
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 """
 
 from dotenv import load_dotenv
