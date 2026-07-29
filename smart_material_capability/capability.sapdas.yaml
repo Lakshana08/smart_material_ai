@@ -2,7 +2,7 @@ schema_version: 3.27.0
 metadata:
   namespace: joule.ext
   name: smart_material_capability
-  version: 1.0.8
+  version: 1.0.10
   display_name: Smart Material AI
   description: >-
     Query material master data, stock levels, and production orders;
