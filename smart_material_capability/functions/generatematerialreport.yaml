@@ -1,0 +1,26 @@
+action_groups:
+  - actions:
+      - type: agent-request
+        system_alias: SMART_MATERIAL_REPORT
+        agent_type: remote
+        result_variable: agentResult
+      # Joule calls via the legacy "message/send" JSON-RPC method with no
+      # A2A-Version header. result_variable is referenced as a bare name
+      # (agentResult, no '#') per Joule's scripting docs.
+      # agentResult.body is already the unwrapped Task (no extra .result
+      # envelope layer). Root cause of every prior failure: the agent used to
+      # enqueue a submitted Task then a separate completed status update -
+      # Joule's agent-request captured the submitted event (status={state:
+      # submitted}, no message at all) before the completed update applied.
+      # The agent now enqueues a single already-completed Task, so
+      # status.message is always present here. The report agent embeds the
+      # download_url directly in that text, so no separate data-part lookup
+      # is needed.
+      - type: set-variables
+        variables:
+          - name: replyText
+            value: <? agentResult.body.status.message.parts[0].text ?>
+      - type: message
+        message:
+          type: text
+          content: "<? replyText ?>"

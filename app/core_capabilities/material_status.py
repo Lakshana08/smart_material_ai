@@ -12,7 +12,7 @@ from app.engine.machine_head import compute_machine_head_candidates
 from app.engine.material_status import compute_material_status
 
 
-DEFAULT_RESULT_LIMIT = 50
+DEFAULT_RESULT_LIMIT = 1000
 
 
 def _cap(results: list[dict], limit: int) -> dict:

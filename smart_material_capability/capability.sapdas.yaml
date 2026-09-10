@@ -1,0 +1,27 @@
+schema_version: 3.27.0
+metadata:
+  namespace: joule.ext
+  name: smart_material_capability
+  version: 1.0.10
+  display_name: Smart Material AI
+  description: >-
+    Query material master data, stock levels, and production orders;
+    create, update, and delete material master fields; generate
+    downloadable material/production order reports in S/4HANA; and check
+    material control status, inventory aging, and machine-head material
+    review candidates, via A2A agents.
+
+system_aliases:
+  SMART_MATERIAL_QUERY:
+    destination: SMART_MATERIAL_QUERY
+  SMART_MATERIAL_ACTION:
+    destination: SMART_MATERIAL_ACTION
+  SMART_MATERIAL_REPORT:
+    destination: SMART_MATERIAL_REPORT
+  SMART_MATERIAL_STATUS:
+    destination: SMART_MATERIAL_STATUS
+
+
+
+
+

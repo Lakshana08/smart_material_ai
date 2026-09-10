@@ -4,8 +4,9 @@ from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.types import AgentSkill
 
-from app.a2a_agents.common import build_agent_card, build_response_message, get_structured_input
+from app.a2a_agents.common import build_agent_card, emit_response, get_structured_input
 from app.core_capabilities.query import (
+    QUERY_ROW_LIMIT,
     query_material_master,
     query_material_serial_numbers,
     query_material_stock,
@@ -73,7 +74,7 @@ def lookup_material_serial_number(material: str, plant: str = "", serial_number:
 
 _TOOLS = [lookup_material_stock, lookup_material_master, lookup_production_order, lookup_material_serial_number]
 
-_AGENT_SYSTEM_PROMPT = """You answer questions about S/4HANA material master data, stock levels, \
+_AGENT_SYSTEM_PROMPT = f"""You answer questions about S/4HANA material master data, stock levels, \
 production orders, and serialized stock (serial numbers) using the tools available - nothing else. \
 Always call the appropriate tool to get real data before answering - never invent numbers or data. \
 Keep answers short and factual (1-3 sentences). Only ask the user to clarify when a tool's one truly \
@@ -82,6 +83,10 @@ Plant and serial_number are optional filters on every tool that accepts them - i
 mention one, call the tool without it and return the unfiltered results; never ask for a plant code \
 or serial number before running a lookup. production_order lookups need at least one of \
 production_order/material/plant, not all three.
+
+Every tool caps results at {QUERY_ROW_LIMIT} rows and returns a true total count plus truncated=true \
+if more rows exist on the S/4HANA side. If truncated is true, say so and suggest narrowing the request \
+(e.g. by production order, material, or plant) instead of trying to list every row.
 
 Do NOT treat questions about over-control/over-issued status, non-controlled material, aging, \
 machine-head material review, report generation, or ZPL pull-list actions as needing more parameters \
@@ -155,12 +160,11 @@ class QueryAgentExecutor(AgentExecutor):
         if args is not None:
             query_type = args.get("query_type", "material_stock")
             if query_type not in VALID_QUERY_TYPES:
-                await event_queue.enqueue_event(
-                    build_response_message(
-                        context,
-                        f"Unknown query_type '{query_type}', expected one of {sorted(VALID_QUERY_TYPES)}.",
-                        {"error": "unknown_query_type"},
-                    )
+                await emit_response(
+                    event_queue,
+                    context,
+                    f"Unknown query_type '{query_type}', expected one of {sorted(VALID_QUERY_TYPES)}.",
+                    {"error": "unknown_query_type"},
                 )
                 return
 
@@ -169,42 +173,38 @@ class QueryAgentExecutor(AgentExecutor):
                 required_field and (args.get(required_field) or args.get("material_number"))
             )
             if required_field and not identifier_present:
-                await event_queue.enqueue_event(
-                    build_response_message(
-                        context,
-                        f"I need a '{required_field}' to run a {query_type} lookup.",
-                        {"error": "missing_required_field", "query_type": query_type},
-                    )
+                await emit_response(
+                    event_queue,
+                    context,
+                    f"I need a '{required_field}' to run a {query_type} lookup.",
+                    {"error": "missing_required_field", "query_type": query_type},
                 )
                 return
 
             try:
                 result, summary = _run_structured_query(args)
             except S4ClientError as exc:
-                await event_queue.enqueue_event(
-                    build_response_message(context, f"Couldn't reach S/4HANA: {exc}", {"error": "s4_error"})
-                )
+                await emit_response(event_queue, context, f"Couldn't reach S/4HANA: {exc}", {"error": "s4_error"})
                 return
 
-            await event_queue.enqueue_event(build_response_message(context, summary, result))
+            await emit_response(event_queue, context, summary, result)
             return
 
         # Free text - let the AI Core tool-calling agent decide what to call.
         text = context.get_user_input()
         agent_result = await run_agent(_AGENT_SYSTEM_PROMPT, _TOOLS, text)
         if agent_result is None:
-            await event_queue.enqueue_event(
-                build_response_message(
-                    context,
-                    "I couldn't process that request right now (AI Core unavailable).",
-                    {"error": "ai_core_unavailable"},
-                )
+            await emit_response(
+                event_queue,
+                context,
+                "I couldn't process that request right now (AI Core unavailable).",
+                {"error": "ai_core_unavailable"},
             )
             return
 
         answer, tool_outputs = agent_result
         data = {"tool_results": tool_outputs} if tool_outputs else None
-        await event_queue.enqueue_event(build_response_message(context, answer, data))
+        await emit_response(event_queue, context, answer, data)
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         # Single-shot synchronous lookups - nothing runs long enough to cancel mid-flight.

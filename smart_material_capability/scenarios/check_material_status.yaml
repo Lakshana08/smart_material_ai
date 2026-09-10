@@ -1,0 +1,17 @@
+description: >-
+  Checks material control status, inventory aging, and machine-head material
+  review candidates against SAP source data (PP-134, 14C, COOIS, Z_AGEDINV).
+  Use when the user asks whether a material is non-controlled or
+  over-control/over-issued, wants to see aging or aged inventory/materials
+  (with or without a specific material or storage location), or wants to
+  review machine-head material candidates. This is NOT about stock quantities
+  or master data lookups - it is about which materials have not moved for an
+  extended period. Example phrasings: "is material SBC095160140
+  non-controlled?", "any over-control materials in storage location S201?",
+  "show aged inventory for storage location A301", "show aging materials",
+  "which materials are aging", "list aging inventory", "show me the material
+  aging report", "any stale inventory that hasn't moved", "show machine-head
+  material needing review".
+target:
+  name: checkmaterialstatus
+  type: function

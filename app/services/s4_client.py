@@ -71,8 +71,14 @@ class S4Client:
             return
         kwargs = self._base_kwargs(resolved)
         kwargs["headers"]["X-CSRF-Token"] = "Fetch"
-        # Fetch against the entity SET, not the keyed entity - the keyed path
-        # 404s if that entity doesn't exist yet (e.g. before a create).
+        # Fetch against the entity SET (key predicate stripped), not the exact
+        # keyed entity being mutated - the token isn't tied to a specific
+        # entity, and the keyed path 404s whenever that entity doesn't exist
+        # yet (e.g. PATCHing a Product/Language description combo that
+        # hasn't been created), which would otherwise block CSRF fetch for
+        # every subsequent POST/create fallback too. Must still be an actual
+        # service path, not the bare host root - GETting resolved.url alone
+        # 404s since there's no service mounted there.
         entity_set_path = path.split("(", 1)[0]
         resp = requests.get(self._url(resolved, entity_set_path), **kwargs)
         resp.raise_for_status()

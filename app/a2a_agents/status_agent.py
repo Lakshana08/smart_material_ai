@@ -8,8 +8,9 @@ from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.types import AgentSkill
 
-from app.a2a_agents.common import build_agent_card, build_response_message, get_structured_input
+from app.a2a_agents.common import build_agent_card, emit_response, get_structured_input
 from app.core_capabilities.material_status import (
+    DEFAULT_RESULT_LIMIT,
     query_aging,
     query_machine_head_candidates,
     query_material_status,
@@ -48,8 +49,8 @@ def check_non_controlled_material(material: str = "", storage_location: str = ""
     production order requirement, or where the requirement is already
     fulfilled. Optionally scoped by material and/or storage_location - but a
     broad call with NO arguments is valid and expected for questions like
-    "show non-controlled material in the warehouse"; it returns up to 50
-    matching records plus the true total count (truncated=true if more exist)."""
+    "show non-controlled material in the warehouse"; it returns up to
+    1000 matching records plus the true total count (truncated=true if more exist)."""
     return query_material_status(
         material=material or None, storage_location=storage_location or None, status_filter="non_controlled"
     )
@@ -61,7 +62,7 @@ def check_over_control_material(work_order: str = "", material: str = "", storag
     stock exceeds the work order's controlled remaining issuance requirement.
     Optionally scoped by work_order, material, and/or storage_location - but a
     broad call with NO arguments is valid for questions like "any over-control
-    materials today"; it returns up to 50 matching records plus the true total
+    materials today"; it returns up to 1000 matching records plus the true total
     count (truncated=true if more exist)."""
     return query_material_status(
         work_order=work_order or None,
@@ -76,7 +77,7 @@ def check_aging(material: str = "", storage_location: str = "") -> dict:
     """Check Aging - inventory that has not moved for more than 14 days
     (fixed threshold). Optionally scoped by material and/or storage_location -
     but a broad call with NO arguments is valid for questions like "show aged
-    inventory"; it returns up to 50 matching records plus the true total count
+    inventory"; it returns up to 1000 matching records plus the true total count
     (truncated=true if more exist). Rows with no Aging Days value in the source
     data (aging_days_unknown=true) are conservatively included as aged rather
     than silently dropped, since their true age can't be confirmed."""
@@ -92,18 +93,24 @@ def check_machine_head_review(order_type: str = "ZNPC") -> dict:
 
 _TOOLS = [check_non_controlled_material, check_over_control_material, check_aging, check_machine_head_review]
 
-_AGENT_SYSTEM_PROMPT = """You answer questions about material control status, inventory aging, and \
+_AGENT_SYSTEM_PROMPT = f"""You answer questions about material control status, inventory aging, and \
 machine-head material review using the tools available. Always call the appropriate tool to get the \
 computed result before answering - the numbers are already calculated for you by the tool, never \
-estimate or invent them yourself. Keep answers short and factual (1-3 sentences).
+estimate or invent them yourself.
 
 Broad questions with no specific material/storage location/work order (e.g. "show non-controlled \
 material in the warehouse", "any over-control materials today", "show aged inventory") are valid on \
 their own - call the tool with no arguments, do not ask the user to narrow it down first. Every tool \
-returns a true total count plus a capped list (up to 50 rows, with truncated=true if more exist) - if \
-truncated is true, say so and suggest narrowing by material or storage location for the full list. \
-Only ask the user for missing information when the question itself refers to a specific thing you \
-can't identify (e.g. "is it over-control" with no material named at all).
+returns a true total count plus a capped list (up to {DEFAULT_RESULT_LIMIT} rows, with truncated=true \
+if more exist). When the question asks for a list ("show", "list", "any ... today", etc.) and the \
+result contains rows, list EVERY row the tool returned as a compact table (material, storage \
+location/plant, and the status-specific fields such as aging_days or available_to_issue_qty) - never \
+just state a bare count instead of the rows, and never say the list is "too long to fit" when you are \
+holding fewer than {DEFAULT_RESULT_LIMIT} rows. Only when truncated is true, say so after the table and \
+suggest narrowing by material or storage location to see the remaining rows. For questions that ask a \
+yes/no or single-fact question (e.g. "is material X non-controlled"), a short 1-3 sentence answer is \
+fine - no table needed. Only ask the user for missing information when the question itself refers to a \
+specific thing you can't identify (e.g. "is it over-control" with no material named at all).
 
 For machine-head review results, always phrase the answer as flagged candidates needing human review \
 - never state it as a confirmed or resolved status."""
@@ -167,7 +174,7 @@ class StatusAgentExecutor(AgentExecutor):
 
         if args is not None:
             result, summary = _run_structured_check(args)
-            await event_queue.enqueue_event(build_response_message(context, summary, result))
+            await emit_response(event_queue, context, summary, result)
             return
 
         # Free text - the LLM decides which tool(s) to call and narrates the
@@ -175,12 +182,11 @@ class StatusAgentExecutor(AgentExecutor):
         text = context.get_user_input()
         agent_result = await run_agent(_AGENT_SYSTEM_PROMPT, _TOOLS, text)
         if agent_result is None:
-            await event_queue.enqueue_event(
-                build_response_message(
-                    context,
-                    "I couldn't process that request right now (AI Core unavailable).",
-                    {"error": "ai_core_unavailable"},
-                )
+            await emit_response(
+                event_queue,
+                context,
+                "I couldn't process that request right now (AI Core unavailable).",
+                {"error": "ai_core_unavailable"},
             )
             return
 
@@ -201,7 +207,7 @@ class StatusAgentExecutor(AgentExecutor):
             )
 
         data = {"tool_results": tool_outputs} if tool_outputs else None
-        await event_queue.enqueue_event(build_response_message(context, answer, data))
+        await emit_response(event_queue, context, answer, data)
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         # Single-shot synchronous lookups - nothing runs long enough to cancel mid-flight.
