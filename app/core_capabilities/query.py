@@ -7,8 +7,23 @@ from app.core_capabilities._s4_apis import (
     PRODUCTION_ORDER,
     PRODUCT_MASTER,
 )
-from app.services.odata_utils import extract_rows, odata_literal, strip_odata_noise
+from app.services.odata_utils import extract_count, extract_rows, odata_literal, strip_odata_noise
 from app.services.s4_client import get_s4_client
+
+# Caps every live S/4HANA fetch below this module. Without it, a broad filter
+# (e.g. "production orders in plant 1710" with no order/material narrowing)
+# can pull back thousands of rows straight into the LLM's tool-result message
+# and blow the model's context window (seen live: 525k tokens on one COOIS
+# fetch). $inlinecount=allpages gets the true total from S/4 in the same
+# request, so callers still know if more rows exist beyond this cap.
+QUERY_ROW_LIMIT = 200
+
+
+def _capped(data: dict, rows: list[dict], limit: int = QUERY_ROW_LIMIT) -> tuple[int, bool]:
+    total = extract_count(data)
+    if total is not None:
+        return total, total > limit
+    return len(rows), len(rows) >= limit
 
 
 def query_material_master(product: str) -> dict:
@@ -17,12 +32,18 @@ def query_material_master(product: str) -> dict:
     flattened into a plain "descriptions" list here."""
     data = get_s4_client().get(
         PRODUCT_MASTER.path,
-        params={"$filter": f"Product eq '{odata_literal(product)}'", "$expand": "to_Description"},
+        params={
+            "$filter": f"Product eq '{odata_literal(product)}'",
+            "$expand": "to_Description",
+            "$top": QUERY_ROW_LIMIT,
+            "$inlinecount": "allpages",
+        },
     )
-    rows = extract_rows(data)
+    rows = extract_rows(data)[:QUERY_ROW_LIMIT]
     for row in rows:
         row["descriptions"] = _clean_nested(row.pop("to_Description", None))
-    return {"product": product, "results": rows, "count": len(rows)}
+    count, truncated = _capped(data, rows)
+    return {"product": product, "results": rows, "count": count, "truncated": truncated}
 
 
 def _clean_nested(nested) -> list[dict]:
@@ -37,10 +58,16 @@ def _clean_nested(nested) -> list[dict]:
 def query_material_stock(material: str, plant: str | None = None) -> dict:
     """MMBE - stock overview, optionally scoped to a plant. Plant isn't a
     top-level $filter field, so results are flattened and filtered client-side."""
-    params = {"$filter": f"Material eq '{odata_literal(material)}'", "$expand": "to_MatlStkInAcctMod"}
+    params = {
+        "$filter": f"Material eq '{odata_literal(material)}'",
+        "$expand": "to_MatlStkInAcctMod",
+        "$top": QUERY_ROW_LIMIT,
+        "$inlinecount": "allpages",
+    }
     data = get_s4_client().get(MATERIAL_STOCK.path, params=params)
-    rows = flatten_stock_rows(extract_rows(data), plant)
-    return {"material": material, "plant": plant, "results": rows, "count": len(rows)}
+    rows = flatten_stock_rows(extract_rows(data)[:QUERY_ROW_LIMIT], plant)
+    count, truncated = _capped(data, rows)
+    return {"material": material, "plant": plant, "results": rows, "count": count, "truncated": truncated}
 
 
 def flatten_stock_rows(rows: list[dict], plant: str | None = None) -> list[dict]:
@@ -70,20 +97,24 @@ def query_production_order(
     """COOIS - production order info, filterable by order/material/plant."""
     filters = []
     if production_order:
-        filters.append(f"ProductionOrder eq '{odata_literal(production_order)}'")
+        filters.append(f"ManufacturingOrder eq '{odata_literal(production_order)}'")
     if material:
         filters.append(f"Material eq '{odata_literal(material)}'")
     if plant:
         filters.append(f"Plant eq '{odata_literal(plant)}'")
-    params = {"$filter": " and ".join(filters)} if filters else None
+    params = {"$top": QUERY_ROW_LIMIT, "$inlinecount": "allpages"}
+    if filters:
+        params["$filter"] = " and ".join(filters)
     data = get_s4_client().get(PRODUCTION_ORDER.path, params=params)
-    rows = extract_rows(data)
+    rows = extract_rows(data)[:QUERY_ROW_LIMIT]
+    count, truncated = _capped(data, rows)
     return {
         "production_order": production_order,
         "material": material,
         "plant": plant,
         "results": rows,
-        "count": len(rows),
+        "count": count,
+        "truncated": truncated,
     }
 
 
@@ -98,12 +129,19 @@ def query_material_serial_numbers(
         filters.append(f"Plant eq '{odata_literal(plant)}'")
     if serial_number:
         filters.append(f"SerialNumber eq '{odata_literal(serial_number)}'")
-    data = get_s4_client().get(MATERIAL_SERIAL_NUMBER.path, params={"$filter": " and ".join(filters)})
-    rows = extract_rows(data)
+    params = {
+        "$filter": " and ".join(filters),
+        "$top": QUERY_ROW_LIMIT,
+        "$inlinecount": "allpages",
+    }
+    data = get_s4_client().get(MATERIAL_SERIAL_NUMBER.path, params=params)
+    rows = extract_rows(data)[:QUERY_ROW_LIMIT]
+    count, truncated = _capped(data, rows)
     return {
         "material": material,
         "plant": plant,
         "serial_number": serial_number,
         "results": rows,
-        "count": len(rows),
+        "count": count,
+        "truncated": truncated,
     }

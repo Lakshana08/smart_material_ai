@@ -1,0 +1,1126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Smart Material AI</title>
+<style>
+  :root{
+    --bg:#f7f1e6;
+    --surface:#ffffff;
+    --surface-2:#f2ead9;
+    --panel-wash: linear-gradient(180deg, #fffdf9 0%, #faf5ec 100%);
+    --ink:#2a2118;
+    --ink-dim:#6b5d4e;
+    --ink-faint:#9c8e7c;
+    --line:#e8dfc9;
+    --line-soft:#f0e8d6;
+    --accent:#0a6ed1;
+    --accent-dark:#0857a8;
+    --accent-ink:#ffffff;
+
+    /* Assistant identity - a cool gradient, deliberately distinct from the
+       warm dashboard palette so the AI's own elements always stand out. */
+    --grad-a:#2f6df6;
+    --grad-b:#8b5cf6;
+    --grad-c:#e34fc9;
+    --grad: linear-gradient(135deg, var(--grad-a), var(--grad-b) 55%, var(--grad-c));
+
+    /* Dashboard stat chips - one warm hue per metric, echoing a
+       multi-color stat-pill row rather than one flat accent everywhere. */
+    --chip-blue-bg:#e3edfb; --chip-blue-ink:#2f6df6;
+    --chip-teal-bg:#dcf1e7; --chip-teal-ink:#1f9c7c;
+    --chip-amber-bg:#fbead2; --chip-amber-ink:#c97f1f;
+    --chip-coral-bg:#fbe1da; --chip-coral-ink:#dd5a3f;
+
+    --ok:#1f9c7c;
+    --warn-bg:var(--chip-amber-bg); --warn-ink:var(--chip-amber-ink);
+    --danger:var(--chip-coral-ink); --danger-bg:var(--chip-coral-bg);
+    --shadow-sm: 0 1px 2px rgba(42,33,24,.07);
+    --shadow-md: 0 8px 24px rgba(42,33,24,.10);
+    --shadow-glow: 0 4px 18px rgba(139,92,246,.28);
+    --sidebar-w: 220px;
+    --chat-w: 400px;
+    --header-h: 64px;
+    --radius: 16px;
+  }
+
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#191420;
+      --surface:#221b29;
+      --surface-2:#2b2333;
+      --panel-wash: linear-gradient(180deg, #241d2c 0%, #191420 100%);
+      --ink:#f2ecf7;
+      --ink-dim:#b6a9c6;
+      --ink-faint:#7d708f;
+      --line:#382e44;
+      --line-soft:#2f2739;
+      --accent:#4a9cf0;
+      --accent-dark:#357fd1;
+      --grad-a:#4a7dff; --grad-b:#a374ff; --grad-c:#f06fd9;
+      --chip-blue-bg:#202a42; --chip-blue-ink:#6ea3f5;
+      --chip-teal-bg:#173328; --chip-teal-ink:#4fd3ab;
+      --chip-amber-bg:#3a2a15; --chip-amber-ink:#f0b166;
+      --chip-coral-bg:#3a1f1e; --chip-coral-ink:#f0897a;
+      --ok:#4fd3ab;
+      --warn-bg:var(--chip-amber-bg); --warn-ink:var(--chip-amber-ink);
+      --danger:var(--chip-coral-ink); --danger-bg:var(--chip-coral-bg);
+      --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+      --shadow-md: 0 8px 24px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#191420;
+    --surface:#221b29;
+    --surface-2:#2b2333;
+    --panel-wash: linear-gradient(180deg, #241d2c 0%, #191420 100%);
+    --ink:#f2ecf7;
+    --ink-dim:#b6a9c6;
+    --ink-faint:#7d708f;
+    --line:#382e44;
+    --line-soft:#2f2739;
+    --accent:#4a9cf0;
+    --accent-dark:#357fd1;
+    --grad-a:#4a7dff; --grad-b:#a374ff; --grad-c:#f06fd9;
+    --chip-blue-bg:#202a42; --chip-blue-ink:#6ea3f5;
+    --chip-teal-bg:#173328; --chip-teal-ink:#4fd3ab;
+    --chip-amber-bg:#3a2a15; --chip-amber-ink:#f0b166;
+    --chip-coral-bg:#3a1f1e; --chip-coral-ink:#f0897a;
+    --ok:#4fd3ab;
+    --warn-bg:var(--chip-amber-bg); --warn-ink:var(--chip-amber-ink);
+    --danger:var(--chip-coral-ink); --danger-bg:var(--chip-coral-bg);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+    --shadow-md: 0 8px 24px rgba(0,0,0,.45);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    display:flex;
+    flex-direction:column;
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+
+  /* ============ Top bar ============ */
+  header{
+    height:var(--header-h);
+    flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 20px;
+    background:var(--surface);
+    border-bottom:1px solid var(--line);
+    z-index:30;
+  }
+  .brand{display:flex; align-items:center; gap:11px;}
+  .brand-mark{
+    width:32px; height:32px; border-radius:8px;
+    background:linear-gradient(155deg, var(--accent), var(--accent-dark));
+    color:var(--accent-ink);
+    display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:13px;
+  }
+  .brand-name{font-weight:700; font-size:14.5px; letter-spacing:-0.01em; line-height:1.2;}
+  .brand-sub{color:var(--ink-faint); font-size:11.5px; margin-top:1px;}
+
+  .header-right{display:flex; align-items:center; gap:10px;}
+
+  .theme-toggle{
+    display:flex; align-items:center; justify-content:center;
+    width:34px; height:34px; border-radius:50%;
+    border:1px solid var(--line);
+    background:var(--surface-2);
+    color:var(--ink-dim);
+    cursor:pointer;
+  }
+  .theme-toggle:hover{color:var(--ink); border-color:var(--ink-faint);}
+  .theme-toggle svg{width:16px; height:16px;}
+  .theme-toggle .icon-moon{display:none;}
+  :root[data-theme="dark"] .theme-toggle .icon-sun{display:none;}
+  :root[data-theme="dark"] .theme-toggle .icon-moon{display:block;}
+
+  .assistant-toggle{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    border:none;
+    background:var(--grad);
+    color:#fff;
+    padding:8px 16px;
+    border-radius:20px;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    box-shadow:var(--shadow-glow);
+    transition:transform .12s ease;
+  }
+  .assistant-toggle:hover{transform:translateY(-1px);}
+  .assistant-toggle svg{width:14px; height:14px;}
+
+  /* ============ Body: sidebar + main ============ */
+  .body-layout{
+    flex:1 1 auto;
+    display:flex;
+    min-height:0;
+    position:relative;
+  }
+
+  nav.sidebar{
+    flex:0 0 var(--sidebar-w);
+    background:var(--surface);
+    border-right:1px solid var(--line);
+    padding:14px 10px;
+    overflow-y:auto;
+    transition:margin-left .18s ease, opacity .18s ease;
+  }
+  nav.sidebar.collapsed{margin-left:calc(var(--sidebar-w) * -1); opacity:0;}
+  .sidebar-collapse{
+    display:flex; align-items:center; gap:7px;
+    font-size:12px; color:var(--ink-dim);
+    background:none; border:none; cursor:pointer;
+    padding:6px 8px; margin-bottom:14px; border-radius:7px;
+    width:100%;
+  }
+  .sidebar-collapse:hover{background:var(--surface-2);}
+  .sidebar-collapse svg{width:14px; height:14px;}
+
+  .nav-group{margin-bottom:16px;}
+  .nav-label{
+    font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+    color:var(--ink-faint); padding:0 8px; margin-bottom:6px;
+  }
+  .nav-item{
+    display:flex; align-items:center; gap:10px;
+    padding:8px; border-radius:10px;
+    font-size:13.5px; font-weight:600; color:var(--ink-dim);
+    cursor:pointer; text-decoration:none;
+    background:none; border:none; width:100%; text-align:left;
+    transition:background .12s ease;
+  }
+  .nav-item:hover{background:var(--surface-2); color:var(--ink);}
+  .nav-item.static{cursor:default; font-weight:500;}
+  .nav-item.static:hover{background:none; color:var(--ink-dim);}
+  .nav-dot{width:7px; height:7px; border-radius:50%; background:var(--ok); flex:0 0 auto;}
+  .nav-badge{
+    margin-left:auto; font-size:10.5px; font-weight:700;
+    background:var(--surface-2); color:var(--ink-dim);
+    border-radius:9px; padding:2px 7px;
+    font-variant-numeric:tabular-nums; flex:0 0 auto;
+  }
+  .nav-item:hover .nav-badge{background:var(--surface);}
+  .nav-icon{
+    width:26px; height:26px; border-radius:8px; flex:0 0 auto;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .nav-icon svg{width:13px; height:13px;}
+  .nav-icon.blue{background:var(--chip-blue-bg); color:var(--chip-blue-ink);}
+  .nav-icon.teal{background:var(--chip-teal-bg); color:var(--chip-teal-ink);}
+  .nav-icon.amber{background:var(--chip-amber-bg); color:var(--chip-amber-ink);}
+  .nav-icon.coral{background:var(--chip-coral-bg); color:var(--chip-coral-ink);}
+  .nav-icon.muted{background:var(--surface-2); color:var(--ink-faint);}
+
+  .nav-item.disabled{cursor:default; opacity:.55;}
+  .nav-item.disabled:hover{background:none; color:var(--ink-dim);}
+
+  /* Trend arrows - prepared for when real historical snapshots exist to
+     diff against. Not shown today: this dataset is a single point-in-time
+     snapshot, so there is no genuine "since last time" to compare, and a
+     fabricated arrow would misrepresent the data. Wire up by adding
+     class="trend-up" or "trend-down" next to any .nav-badge once a
+     real prior-snapshot value is available to compare. */
+  .nav-trend{display:inline-flex; align-items:center; margin-left:3px;}
+  .nav-trend svg{width:10px; height:10px;}
+  .nav-trend.trend-up{color:var(--chip-coral-ink);}
+  .nav-trend.trend-down{color:var(--chip-teal-ink);}
+
+  .scope-filter{
+    display:flex; flex-direction:column; gap:6px;
+    padding:0 8px 14px; margin-bottom:6px;
+    border-bottom:1px solid var(--line-soft);
+  }
+  .scope-filter label{
+    font-size:9.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-faint); margin-bottom:-2px;
+  }
+  .scope-select{
+    width:100%; font-size:12px; font-weight:600; color:var(--ink);
+    background:var(--surface-2); border:1px solid var(--line);
+    border-radius:8px; padding:6px 8px;
+    font-family:inherit; cursor:pointer;
+  }
+  .scope-select:focus{outline:none; border-color:var(--grad-b);}
+
+  .expand-sidebar{
+    display:none;
+    position:absolute; left:12px; top:12px; z-index:10;
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:8px; padding:7px 9px; cursor:pointer;
+    color:var(--ink-dim);
+  }
+  .expand-sidebar.show{display:inline-flex;}
+  .expand-sidebar svg{width:14px; height:14px;}
+
+  main{
+    flex:1 1 auto;
+    overflow-y:auto;
+    overflow-anchor:none;
+    scroll-behavior:smooth;
+    padding:36px clamp(18px,3vw,40px);
+  }
+  .content-col{max-width:920px; margin:0 auto;}
+
+  /* A sidebar Topic link jumps here via #id, then this briefly highlights
+     so it's obvious what you landed on, not just that the page moved. */
+  .kpi-card:target, .panel:target{
+    scroll-margin-top:24px;
+    animation:target-flash 1.8s ease-out;
+  }
+  @keyframes target-flash{
+    0%{box-shadow:0 0 0 3px var(--grad-b), var(--shadow-md);}
+    100%{box-shadow:var(--shadow-sm);}
+  }
+
+  .hero{margin:0 0 32px; text-align:center;}
+  .hero h1{
+    font-size:clamp(26px,3.6vw,38px);
+    font-weight:800;
+    margin:0 0 12px;
+    letter-spacing:-0.025em;
+    line-height:1.12;
+    text-wrap:balance;
+  }
+  .hero p{
+    color:var(--ink-dim); font-size:14px; line-height:1.65;
+    margin:0 auto; max-width:64ch;
+  }
+
+  .section-head{margin:0 0 12px;}
+  .section-head h2{margin:0 0 3px; font-size:15.5px; font-weight:800; letter-spacing:-0.01em;}
+  .section-head p{margin:0; font-size:12px; color:var(--ink-faint);}
+
+  .kpi-row{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+    gap:14px;
+    margin-bottom:26px;
+  }
+  .kpi-card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:18px 20px;
+    box-shadow:var(--shadow-sm);
+    transition:box-shadow .15s ease, transform .15s ease;
+  }
+  .kpi-card:hover{box-shadow:var(--shadow-md); transform:translateY(-2px);}
+  .kpi-icon{
+    width:34px; height:34px; border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    margin-bottom:12px;
+  }
+  .kpi-icon svg{width:16px; height:16px;}
+  .kpi-icon.blue{background:var(--chip-blue-bg); color:var(--chip-blue-ink);}
+  .kpi-icon.teal{background:var(--chip-teal-bg); color:var(--chip-teal-ink);}
+  .kpi-icon.amber{background:var(--chip-amber-bg); color:var(--chip-amber-ink);}
+  .kpi-icon.coral{background:var(--chip-coral-bg); color:var(--chip-coral-ink);}
+  .kpi-label{font-size:11px; color:var(--ink-faint); font-weight:700; margin-bottom:8px; letter-spacing:.03em; text-transform:uppercase;}
+  .kpi-value{font-size:30px; font-weight:800; letter-spacing:-0.025em; font-variant-numeric:tabular-nums;}
+  .kpi-value.teal{color:var(--chip-teal-ink);}
+  .kpi-value.amber{color:var(--chip-amber-ink);}
+  .kpi-value.coral{color:var(--chip-coral-ink);}
+  .kpi-note{font-size:11.5px; color:var(--ink-faint); margin-top:5px;}
+
+  .panels{
+    display:grid;
+    grid-template-columns:1fr 1.3fr;
+    gap:16px;
+  }
+  @media (max-width:820px){ .panels{grid-template-columns:1fr;} }
+
+  .panel{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow-sm);
+    display:flex;
+    flex-direction:column;
+  }
+  .panel-head{padding:15px 18px; border-bottom:1px solid var(--line-soft);}
+  .panel-head h3{margin:0 0 4px; font-size:14px;}
+  .panel-head p{margin:0; font-size:11.5px; color:var(--ink-faint); line-height:1.5;}
+  .panel-body{padding:14px 18px; flex:1;}
+
+  .empty-panel{
+    text-align:center; color:var(--ink-faint); font-size:12.5px;
+    padding:22px 12px; background:var(--surface-2); border-radius:10px;
+  }
+  .empty-panel .ok-dot{width:7px; height:7px; border-radius:50%; background:var(--ok); display:inline-block; margin-right:6px;}
+
+  .attn-item{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:10px; padding:11px 0; border-bottom:1px solid var(--line-soft);
+  }
+  .attn-item:last-child{border-bottom:none;}
+  .attn-mat{font-size:12.5px; font-weight:700;}
+  .attn-meta{font-size:11px; color:var(--ink-faint); margin-top:2px;}
+  .attn-badge{
+    font-size:11px; font-weight:700; font-variant-numeric:tabular-nums;
+    background:var(--danger-bg); color:var(--danger);
+    border-radius:8px; padding:3px 8px; white-space:nowrap;
+  }
+  .attn-badge.oc{background:var(--warn-bg); color:var(--warn-ink);}
+  .discuss-btn{
+    font-size:11px; font-weight:600; color:var(--grad-b);
+    background:none; border:none; cursor:pointer; padding:3px 0 0;
+  }
+  .discuss-btn:hover{text-decoration:underline;}
+
+  /* ============ Chat overlay panel - slides in from the RIGHT ============ */
+  .chat-scrim{
+    position:fixed; inset:0; background:rgba(8,10,20,.32);
+    opacity:0; pointer-events:none; transition:opacity .18s ease; z-index:39;
+  }
+  .chat-scrim.show{opacity:1; pointer-events:auto;}
+
+  aside#side-panel{
+    position:fixed;
+    top:0; bottom:0; right:0;
+    width:var(--chat-w);
+    max-width:92vw;
+    display:flex;
+    flex-direction:column;
+    background:var(--panel-wash);
+    border-left:1px solid var(--line);
+    box-shadow:-12px 0 32px rgba(8,10,20,.18);
+    transform:translateX(100%);
+    transition:transform .2s ease;
+    z-index:40;
+  }
+  aside#side-panel.open{transform:translateX(0);}
+
+  .chat-head{
+    flex:0 0 auto;
+    padding:16px 16px 14px;
+    border-bottom:1px solid var(--line-soft);
+    background:var(--surface);
+  }
+  .chat-head-top{display:flex; align-items:center; gap:11px;}
+  .avatar-orb{
+    position:relative;
+    width:34px; height:34px;
+    border-radius:50%;
+    flex:0 0 auto;
+    background:var(--grad);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:var(--shadow-glow);
+  }
+  .avatar-orb::after{
+    content:"";
+    position:absolute; inset:-4px; border-radius:50%;
+    background:var(--grad); opacity:.35; filter:blur(6px); z-index:-1;
+    animation:pulse 2.6s ease-in-out infinite;
+  }
+  .avatar-orb svg{width:15px; height:15px; color:#fff;}
+  @keyframes pulse{0%,100%{transform:scale(1); opacity:.35;} 50%{transform:scale(1.18); opacity:.55;}}
+  .chat-head-text{flex:1; min-width:0;}
+  .chat-head-title{font-weight:700; font-size:14px; letter-spacing:-0.005em;}
+  .chat-head-sub{color:var(--ink-faint); font-size:11px; margin-top:1px;}
+  .chat-close{
+    flex:0 0 auto; background:none; border:none; cursor:pointer;
+    color:var(--ink-faint); padding:5px; border-radius:7px;
+  }
+  .chat-close:hover{background:var(--surface-2); color:var(--ink);}
+  .chat-close svg{width:16px; height:16px;}
+
+  .chat-open-link{
+    flex:0 0 auto;
+    font-size:10.5px; font-weight:600;
+    color:var(--ink-dim); text-decoration:none; white-space:nowrap;
+    border:1px solid var(--line); padding:4px 9px; border-radius:20px;
+  }
+  .chat-open-link:hover{color:var(--grad-b); border-color:var(--grad-b);}
+
+  .agent-tabs{display:flex; gap:3px; margin-top:13px; background:var(--surface-2); padding:3px; border-radius:11px;}
+  .agent-tab{
+    flex:1; text-align:center; font-size:11.5px; font-weight:600;
+    padding:7px 4px; border-radius:8px; color:var(--ink-dim);
+    cursor:pointer; transition:all .15s ease;
+  }
+  .agent-tab.active{background:var(--surface); color:var(--grad-b); box-shadow:var(--shadow-sm);}
+
+  .chat-body{
+    flex:1 1 auto; overflow-y:auto; padding:16px;
+    display:flex; flex-direction:column; gap:14px; min-height:0;
+  }
+  .empty-state{margin:auto 0; text-align:center; padding:10px 4px 16px;}
+  .empty-state .avatar-orb{margin:0 auto 12px;}
+  .empty-state h4{margin:0 0 5px; font-size:13.5px;}
+  .empty-state p{font-size:12px; color:var(--ink-faint); margin:0 0 14px;}
+  .prompt-pills{display:flex; flex-direction:column; gap:7px;}
+  .suggestion-chip{
+    text-align:left; font-size:12px; color:var(--ink-dim);
+    background:var(--surface); border:1px solid var(--line); border-radius:11px;
+    padding:9px 12px; cursor:pointer; transition:border-color .12s ease, color .12s ease;
+  }
+  .suggestion-chip:hover{border-color:var(--grad-b); color:var(--grad-b);}
+
+  .msg{max-width:90%; display:flex; gap:8px; align-items:flex-start;}
+  .msg.user{align-self:flex-end; flex-direction:row-reverse;}
+  .msg.assistant{align-self:flex-start;}
+  .msg-avatar{
+    width:22px; height:22px; border-radius:50%; flex:0 0 auto;
+    background:var(--grad); display:flex; align-items:center; justify-content:center; margin-top:2px;
+  }
+  .msg-avatar svg{width:10px; height:10px; color:#fff;}
+  .msg-col{display:flex; flex-direction:column; gap:4px; min-width:0;}
+  .msg.user .msg-col{align-items:flex-end;}
+  .bubble{
+    padding:10px 13px; border-radius:15px; font-size:13px; line-height:1.5;
+    white-space:pre-wrap; word-break:break-word;
+  }
+  .msg.user .bubble{background:var(--grad); color:#fff; border-bottom-right-radius:5px;}
+  .msg.assistant .bubble{background:var(--surface); border:1px solid var(--line-soft); border-bottom-left-radius:5px; box-shadow:var(--shadow-sm);}
+  .msg.error .bubble{background:var(--danger-bg); color:var(--danger); border:1px solid var(--line-soft); box-shadow:none;}
+  .msg-link{color:var(--grad-b); font-weight:600; word-break:break-all;}
+  .msg.user .msg-link{color:#fff; text-decoration:underline;}
+  .download-btn{
+    display:inline-flex; align-items:center; gap:7px; align-self:flex-start;
+    background:var(--surface); border:1px solid var(--line); color:var(--ink);
+    text-decoration:none; font-size:12px; font-weight:600; padding:7px 12px;
+    border-radius:10px; box-shadow:var(--shadow-sm);
+  }
+  .download-btn:hover{border-color:var(--grad-b);}
+  .download-btn svg{width:13px; height:13px; color:var(--grad-b);}
+  .data-toggle{font-size:10.5px; color:var(--grad-b); background:none; border:none; cursor:pointer; padding:2px 3px; font-weight:600; align-self:flex-start;}
+  .data-block{
+    font-family:ui-monospace,"SF Mono",Consolas,monospace; font-size:10px;
+    background:#12172a; color:#c9d6f2; border-radius:10px; padding:10px;
+    max-height:200px; overflow:auto; display:none; max-width:100%;
+  }
+  .data-block.show{display:block;}
+
+  .typing{display:flex; gap:5px; padding:3px 2px;}
+  .typing span{width:6px; height:6px; border-radius:50%; background:var(--grad); animation:blink 1.2s infinite ease-in-out;}
+  .typing span:nth-child(2){animation-delay:.2s;}
+  .typing span:nth-child(3){animation-delay:.4s;}
+  @keyframes blink{0%,80%,100%{opacity:.3; transform:scale(.85);} 40%{opacity:1; transform:scale(1);}}
+
+  .chat-input-row{flex:0 0 auto; padding:13px; border-top:1px solid var(--line-soft); background:var(--surface); display:flex; gap:8px; align-items:flex-end;}
+  .input-shell{
+    flex:1; display:flex; align-items:flex-end; background:var(--surface-2);
+    border:1px solid var(--line); border-radius:20px; padding:4px 6px 4px 14px;
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  .input-shell:focus-within{border-color:var(--grad-b); box-shadow:0 0 0 3px rgba(139,92,246,.15);}
+  #chat-input{flex:1; resize:none; border:none; background:transparent; padding:8px 0; font-size:13px; font-family:inherit; max-height:90px; color:var(--ink);}
+  #chat-input:focus{outline:none;}
+  #chat-send{
+    flex:0 0 auto; background:var(--grad); color:#fff; border:none; border-radius:50%;
+    width:33px; height:33px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    box-shadow:var(--shadow-glow);
+  }
+  #chat-send:disabled{background:var(--ink-faint); box-shadow:none; cursor:not-allowed;}
+  #chat-send svg{width:14px; height:14px;}
+
+  @media (max-width: 680px){
+    nav.sidebar{position:fixed; top:var(--header-h); bottom:0; left:0; z-index:20; box-shadow:var(--shadow-md);}
+    nav.sidebar.collapsed{margin-left:calc(var(--sidebar-w) * -1);}
+  }
+</style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark">SM</div>
+      <div>
+        <div class="brand-name">Smart Material AI</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark mode" title="Toggle dark mode">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <button class="assistant-toggle" onclick="toggleChat()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c.6 3.2 1.2 5.6 2.4 6.8S17.8 11.4 21 12c-3.2.6-5.6 1.2-6.8 2.4S12.6 17.8 12 21c-.6-3.2-1.2-5.6-2.4-6.8S6.2 12.6 3 12c3.2-.6 5.6-1.2 6.8-2.4S11.4 6.2 12 3z"/></svg>
+        Smart Material AI Assistant
+      </button>
+    </div>
+  </header>
+
+  <div class="body-layout">
+    <button class="expand-sidebar" id="expand-sidebar" onclick="toggleSidebar()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+
+    <nav class="sidebar" id="sidebar">
+      <button class="sidebar-collapse" onclick="toggleSidebar()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        Collapse
+      </button>
+
+      <div class="scope-filter">
+        <label for="scope-plant">Plant</label>
+        <select class="scope-select" id="scope-plant"><option value="">All plants</option></select>
+        <label for="scope-storage">Storage Location</label>
+        <select class="scope-select" id="scope-storage"><option value="">All locations</option></select>
+        <label for="scope-material-group">Material Group</label>
+        <select class="scope-select" id="scope-material-group"><option value="">All groups</option></select>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">Overview</div>
+        <a class="nav-item" href="#overview">
+          <span class="nav-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span>
+          Summary
+        </a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">Inventory Health</div>
+        <a class="nav-item" href="#kpi-over-control">
+          <span class="nav-icon coral"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></span>
+          Over-Control
+          <span class="nav-badge" data-badge="over_control">68</span>
+        </a>
+        <a class="nav-item" href="#kpi-blocked">
+          <span class="nav-icon coral"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          Blocked Stock
+          <span class="nav-badge" data-badge="blocked_stock">0</span>
+        </a>
+        <a class="nav-item" href="#kpi-aging">
+          <span class="nav-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+          Aging
+          <span class="nav-badge" data-badge="aging">499</span>
+        </a>
+        <a class="nav-item" href="#kpi-non-controlled">
+          <span class="nav-icon teal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          Non-Controlled
+          <span class="nav-badge" data-badge="non_controlled">1,678</span>
+        </a>
+        <a class="nav-item" href="#kpi-material">
+          <span class="nav-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></span>
+          Material
+          <span class="nav-badge" data-badge="total_material">2,644</span>
+        </a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">Production Status</div>
+        <a class="nav-item" href="#kpi-exceptions">
+          <span class="nav-icon coral"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg></span>
+          Exception Orders
+          <span class="nav-badge" data-badge="exception_orders">11</span>
+        </a>
+        <span class="nav-item disabled" title="Needs a defined completion/progress rule before this can show a real number">
+          <span class="nav-icon muted"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>
+          Order Execution
+        </span>
+        <span class="nav-item disabled" title="Needs a defined capacity/load rule before this can show a real number">
+          <span class="nav-icon muted"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="18" height="12" rx="2"/><line x1="23" y1="13" x2="23" y2="11"/></svg></span>
+          Work Center Load
+        </span>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">Material Usage</div>
+        <a class="nav-item" href="#panel-attention">
+          <span class="nav-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+          Shortage
+        </a>
+        <a class="nav-item" href="#panel-machine-head">
+          <span class="nav-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8 12 14.7 8.7 11.4 3 17"/></svg></span>
+          Machine-Head
+          <span class="nav-badge" data-badge="machine_head">0</span>
+        </a>
+        <span class="nav-item disabled" title="Needs a defined theoretical-vs-actual variance threshold before this can show a real number">
+          <span class="nav-icon muted"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 3 3 5-6"/></svg></span>
+          Usage Variance
+        </span>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">Data Quality</div>
+        <a class="nav-item" href="#kpi-missing">
+          <span class="nav-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+          Missing Data
+          <span class="nav-badge" data-badge="missing_data">0</span>
+        </a>
+        <span class="nav-item disabled" title="Needs a defined compliance rule before this can show a real number">
+          <span class="nav-icon muted"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 6v6c0 5 3.8 8.5 9 10 5.2-1.5 9-5 9-10V6z"/></svg></span>
+          Rule Compliance
+        </span>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">Integration</div>
+        <div class="nav-item static"><span class="nav-dot"></span>Live S/4HANA</div>
+      </div>
+    </nav>
+
+    <main>
+     <div class="content-col">
+      <div class="hero" id="overview">
+        <h1>Material shortage, aging &amp; over-control at a glance</h1>
+        <p>Checks material control status, inventory aging, and machine-head material review candidates
+           using deterministic business rules, not live guesswork: non-controlled material has no linked
+           production-order requirement, over-control means unrestricted stock exceeds the controlled
+           allowance, and aging flags stock untouched for more than 14 days.</p>
+      </div>
+
+      <div class="section-head" id="insights">
+        <h2>Insights</h2>
+        <p>Non-controlled, over-control, aging, and machine-head status, computed from the sources above.</p>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi-card" id="kpi-material">
+          <div class="kpi-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>
+          <div class="kpi-label">Total material records</div>
+          <div class="kpi-value" data-metric="total_material">2,644</div>
+          <div class="kpi-note">Z_AGEDINV, current snapshot</div>
+        </div>
+        <div class="kpi-card" id="kpi-non-controlled">
+          <div class="kpi-icon teal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+          <div class="kpi-label">Non-controlled material</div>
+          <div class="kpi-value teal" data-metric="non_controlled">1,678</div>
+          <div class="kpi-note">No linked production-order requirement</div>
+        </div>
+        <div class="kpi-card" id="kpi-over-control">
+          <div class="kpi-icon coral"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+          <div class="kpi-label">Over-control material</div>
+          <div class="kpi-value coral" data-metric="over_control">68</div>
+          <div class="kpi-note">Exceeds controlled allowance</div>
+        </div>
+        <div class="kpi-card" id="kpi-aging">
+          <div class="kpi-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <div class="kpi-label">Aged inventory (&gt;14 days)</div>
+          <div class="kpi-value amber" data-metric="aging">499</div>
+          <div class="kpi-note">of 2,644 tracked records</div>
+        </div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi-card" id="kpi-blocked">
+          <div class="kpi-icon coral"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+          <div class="kpi-label">Blocked stock</div>
+          <div class="kpi-value coral" data-metric="blocked_stock">0</div>
+          <div class="kpi-note">Blocked &gt; 0 in current scope</div>
+        </div>
+        <div class="kpi-card" id="kpi-exceptions">
+          <div class="kpi-icon coral"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg></div>
+          <div class="kpi-label">Exception orders</div>
+          <div class="kpi-value coral" data-metric="exception_orders">11</div>
+          <div class="kpi-note">Flagged for exclusion (order status)</div>
+        </div>
+        <div class="kpi-card" id="kpi-missing">
+          <div class="kpi-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+          <div class="kpi-label">Missing data</div>
+          <div class="kpi-value amber" data-metric="missing_data">0</div>
+          <div class="kpi-note">Aging value not recorded</div>
+        </div>
+      </div>
+
+      <div class="panels" id="panels">
+        <div class="panel" id="panel-machine-head">
+          <div class="panel-head">
+            <h3>Machine-Head Review</h3>
+            <p>ZNPC orders with prior GI history, flagged for human review only — never auto-resolved.</p>
+          </div>
+          <div class="panel-body">
+            <div class="empty-panel"><span class="ok-dot"></span>No machine-head candidates in the current dataset.</div>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-attention">
+          <div class="panel-head">
+            <h3>Materials Needing Attention</h3>
+            <p>Highest-aging and over-control records from the current snapshot.</p>
+          </div>
+          <div class="panel-body">
+            <div class="attn-item">
+              <div>
+                <div class="attn-mat">PKLYR05066</div>
+                <div class="attn-meta">Storage P201 · Plant CN16</div>
+                <button class="discuss-btn" data-agent="status" data-q="How long has material PKLYR05066 been aging in storage location P201?">Discuss in chat →</button>
+              </div>
+              <span class="attn-badge">326 days</span>
+            </div>
+            <div class="attn-item">
+              <div>
+                <div class="attn-mat">ATNR90681</div>
+                <div class="attn-meta">Storage A301 · Plant CN16</div>
+                <button class="discuss-btn" data-agent="status" data-q="How long has material ATNR90681 been aging in storage location A301?">Discuss in chat →</button>
+              </div>
+              <span class="attn-badge">320 days</span>
+            </div>
+            <div class="attn-item">
+              <div>
+                <div class="attn-mat">PNINK99174</div>
+                <div class="attn-meta">Storage P301 · Plant CN16</div>
+                <button class="discuss-btn" data-agent="status" data-q="How long has material PNINK99174 been aging in storage location P301?">Discuss in chat →</button>
+              </div>
+              <span class="attn-badge">320 days</span>
+            </div>
+            <div class="attn-item">
+              <div>
+                <div class="attn-mat">ACPE21667</div>
+                <div class="attn-meta">Storage M401 · over-control by 0.81 units</div>
+                <button class="discuss-btn" data-agent="status" data-q="Is material ACPE21667 in storage location M401 over-control?">Discuss in chat →</button>
+              </div>
+              <span class="attn-badge oc">Over-control</span>
+            </div>
+          </div>
+        </div>
+      </div>
+     </div>
+    </main>
+  </div>
+
+  <div class="chat-scrim" id="chat-scrim" onclick="toggleChat(false)"></div>
+  <aside id="side-panel">
+    <div class="chat-head">
+      <div class="chat-head-top">
+        <div class="avatar-orb">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 3c.6 3.2 1.2 5.6 2.4 6.8S17.8 11.4 21 12c-3.2.6-5.6 1.2-6.8 2.4S12.6 17.8 12 21c-.6-3.2-1.2-5.6-2.4-6.8S6.2 12.6 3 12c3.2-.6 5.6-1.2 6.8-2.4S11.4 6.2 12 3z"/>
+            <path d="M18.5 3c.25 1.1.5 1.9 1 2.4s1.3.75 2.4 1c-1.1.25-1.9.5-2.4 1s-.75 1.3-1 2.4c-.25-1.1-.5-1.9-1-2.4s-1.3-.75-2.4-1c1.1-.25 1.9-.5 2.4-1s.75-1.3 1-2.4z" opacity=".7"/>
+          </svg>
+        </div>
+        <div class="chat-head-text">
+          <div class="chat-head-title">Smart Material Assistant</div>
+          <div class="chat-head-sub" id="chat-agent-sub">Talking to Status Agent</div>
+        </div>
+        <a class="chat-open-link" href="https://gen-ai.us10.sapdas.cloud.sap/webclient/standalone/smart_material_test" target="_blank" rel="noopener">Open Joule ↗</a>
+        <button class="chat-close" onclick="toggleChat(false)" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="agent-tabs" id="agent-tabs">
+        <div class="agent-tab" data-agent="query">Query</div>
+        <div class="agent-tab" data-agent="action">Action</div>
+        <div class="agent-tab" data-agent="report">Report</div>
+        <div class="agent-tab active" data-agent="status">Status</div>
+      </div>
+    </div>
+
+    <div class="chat-body" id="chat-body">
+      <div class="empty-state" id="empty-state">
+        <div class="avatar-orb">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 3c.6 3.2 1.2 5.6 2.4 6.8S17.8 11.4 21 12c-3.2.6-5.6 1.2-6.8 2.4S12.6 17.8 12 21c-.6-3.2-1.2-5.6-2.4-6.8S6.2 12.6 3 12c3.2-.6 5.6-1.2 6.8-2.4S11.4 6.2 12 3z"/>
+            <path d="M18.5 3c.25 1.1.5 1.9 1 2.4s1.3.75 2.4 1c-1.1.25-1.9.5-2.4 1s-.75 1.3-1 2.4c-.25-1.1-.5-1.9-1-2.4s-1.3-.75-2.4-1c1.1-.25 1.9-.5 2.4-1s.75-1.3 1-2.4z" opacity=".7"/>
+          </svg>
+        </div>
+        <h4>How can I help?</h4>
+        <p>Ask anything about material status, or try one of these</p>
+        <div class="prompt-pills">
+          <button class="suggestion-chip" data-q="Any over-control materials in storage location S201?">Any over-control materials in storage location S201?</button>
+          <button class="suggestion-chip" data-q="Show aged inventory for storage location A301">Show aged inventory for storage location A301</button>
+          <button class="suggestion-chip" data-q="Show machine-head material needing review">Show machine-head material needing review</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-input-row">
+      <div class="input-shell">
+        <textarea id="chat-input" rows="1" placeholder="Ask a question..."></textarea>
+      </div>
+      <button id="chat-send" onclick="sendChat()" aria-label="Send">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </div>
+  </aside>
+
+<script>
+  // ---- Theme: explicit choice persisted in localStorage; system
+  // preference used only when nothing has been chosen yet. ----
+  (function initTheme() {
+    const saved = localStorage.getItem("theme");
+    if (saved) document.documentElement.setAttribute("data-theme", saved);
+  })();
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute("data-theme")
+      || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const next = current === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("theme", next);
+  }
+
+  const AGENT_LABELS = { query: "Query Agent", action: "Action Agent", report: "Report Agent", status: "Status Agent" };
+  let currentAgent = "status";
+
+  const ORB_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c.6 3.2 1.2 5.6 2.4 6.8S17.8 11.4 21 12c-3.2.6-5.6 1.2-6.8 2.4S12.6 17.8 12 21c-.6-3.2-1.2-5.6-2.4-6.8S6.2 12.6 3 12c3.2-.6 5.6-1.2 6.8-2.4S11.4 6.2 12 3z"/></svg>';
+
+  const sidebar = document.getElementById("sidebar");
+  const expandBtn = document.getElementById("expand-sidebar");
+  const sidePanel = document.getElementById("side-panel");
+  const scrim = document.getElementById("chat-scrim");
+  const chatBody = document.getElementById("chat-body");
+  const chatInput = document.getElementById("chat-input");
+  const sendBtn = document.getElementById("chat-send");
+  const emptyState = document.getElementById("empty-state");
+  const agentSub = document.getElementById("chat-agent-sub");
+
+  function toggleSidebar() {
+    sidebar.classList.toggle("collapsed");
+    expandBtn.classList.toggle("show", sidebar.classList.contains("collapsed"));
+  }
+
+  // ---- Scope filter (Plant / Storage Location / Material Group) - real
+  // options and a real recompute on change, not a decorative dropdown.
+  // Exception Orders and Machine-Head aren't scoped: COOIS and PP-134 don't
+  // carry Plant/Storage Location/Material Group, so filtering them would
+  // mean fabricating a relationship that isn't in the source data. ----
+  const scopePlant = document.getElementById("scope-plant");
+  const scopeStorage = document.getElementById("scope-storage");
+  const scopeMaterialGroup = document.getElementById("scope-material-group");
+
+  function fillSelect(select, values) {
+    for (const v of values) {
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v;
+      select.appendChild(opt);
+    }
+  }
+
+  async function loadScopeOptions() {
+    try {
+      const resp = await fetch("/api/dashboard/scope-options");
+      const data = await resp.json();
+      fillSelect(scopePlant, data.plants || []);
+      fillSelect(scopeStorage, data.storage_locations || []);
+      fillSelect(scopeMaterialGroup, data.material_groups || []);
+    } catch (err) {
+      console.error("Couldn't load scope filter options:", err);
+    }
+  }
+
+  async function refreshDashboardSummary() {
+    const params = new URLSearchParams();
+    if (scopePlant.value) params.set("plant", scopePlant.value);
+    if (scopeStorage.value) params.set("storage_location", scopeStorage.value);
+    if (scopeMaterialGroup.value) params.set("material_group", scopeMaterialGroup.value);
+
+    try {
+      const resp = await fetch("/api/dashboard/summary?" + params.toString());
+      const summary = await resp.json();
+      const formatted = {};
+      for (const [key, value] of Object.entries(summary)) {
+        formatted[key] = value.toLocaleString();
+      }
+      document.querySelectorAll("[data-badge]").forEach(el => {
+        const key = el.dataset.badge;
+        if (key in formatted) el.textContent = formatted[key];
+      });
+      document.querySelectorAll("[data-metric]").forEach(el => {
+        const key = el.dataset.metric;
+        if (key in formatted) el.textContent = formatted[key];
+      });
+    } catch (err) {
+      console.error("Couldn't refresh dashboard summary:", err);
+    }
+  }
+
+  [scopePlant, scopeStorage, scopeMaterialGroup].forEach(select => {
+    select.addEventListener("change", refreshDashboardSummary);
+  });
+  loadScopeOptions();
+
+  function toggleChat(force) {
+    const open = typeof force === "boolean" ? force : !sidePanel.classList.contains("open");
+    sidePanel.classList.toggle("open", open);
+    scrim.classList.toggle("show", open);
+    if (open) chatInput.focus();
+  }
+
+  function setAgent(agent) {
+    currentAgent = agent;
+    agentSub.textContent = "Talking to " + AGENT_LABELS[agent];
+    document.querySelectorAll(".agent-tab").forEach(t => t.classList.toggle("active", t.dataset.agent === agent));
+  }
+
+  document.querySelectorAll(".agent-tab").forEach(tab => {
+    tab.addEventListener("click", () => setAgent(tab.dataset.agent));
+  });
+
+  document.querySelectorAll(".suggestion-chip").forEach(chip => {
+    chip.addEventListener("click", () => { chatInput.value = chip.dataset.q; sendChat(); });
+  });
+
+  document.querySelectorAll(".discuss-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      setAgent(btn.dataset.agent);
+      chatInput.value = btn.dataset.q;
+      toggleChat(true);
+      sendChat();
+    });
+  });
+
+  chatInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); }
+  });
+  chatInput.addEventListener("input", () => {
+    chatInput.style.height = "auto";
+    chatInput.style.height = Math.min(chatInput.scrollHeight, 90) + "px";
+  });
+
+  function uuid() {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function linkify(text) {
+    return escapeHtml(text).replace(/(https?:\/\/[^\s]+)/g, (url) =>
+      `<a class="msg-link" href="${url}" target="_blank" rel="noopener">${url}</a>`
+    );
+  }
+  function findDownloadUrl(dataObj) {
+    if (!dataObj) return null;
+    if (dataObj.download_url) return dataObj.download_url;
+    if (Array.isArray(dataObj.tool_results)) {
+      for (const r of dataObj.tool_results) {
+        if (r && r.download_url) return r.download_url;
+      }
+    }
+    return null;
+  }
+
+  function addMessage(role, text, dataObj) {
+    emptyState.style.display = "none";
+    const msg = document.createElement("div");
+    msg.className = "msg " + role;
+
+    if (role !== "user") {
+      const avatar = document.createElement("div");
+      avatar.className = "msg-avatar";
+      avatar.innerHTML = ORB_ICON;
+      msg.appendChild(avatar);
+    }
+
+    const col = document.createElement("div");
+    col.className = "msg-col";
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.innerHTML = linkify(text);
+    col.appendChild(bubble);
+
+    const downloadUrl = findDownloadUrl(dataObj);
+    if (downloadUrl) {
+      const link = document.createElement("a");
+      link.className = "download-btn";
+      link.href = downloadUrl;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg> Download report';
+      col.appendChild(link);
+    }
+
+    if (dataObj) {
+      const toggle = document.createElement("button");
+      toggle.className = "data-toggle";
+      toggle.textContent = "Show data";
+      const block = document.createElement("pre");
+      block.className = "data-block";
+      block.textContent = JSON.stringify(dataObj, null, 2);
+      toggle.addEventListener("click", () => {
+        block.classList.toggle("show");
+        toggle.textContent = block.classList.contains("show") ? "Hide data" : "Show data";
+      });
+      col.appendChild(toggle);
+      col.appendChild(block);
+    }
+
+    msg.appendChild(col);
+    chatBody.appendChild(msg);
+    chatBody.scrollTop = chatBody.scrollHeight;
+    return msg;
+  }
+
+  function addTyping() {
+    const msg = document.createElement("div");
+    msg.className = "msg assistant";
+    msg.id = "typing-indicator";
+    msg.innerHTML = `<div class="msg-avatar">${ORB_ICON}</div>
+      <div class="msg-col"><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div></div>`;
+    chatBody.appendChild(msg);
+    chatBody.scrollTop = chatBody.scrollHeight;
+  }
+  function removeTyping() {
+    const el = document.getElementById("typing-indicator");
+    if (el) el.remove();
+  }
+
+  // Same-origin request to our own agent - no CORS issue, since this page
+  // is served by the same FastAPI app that hosts /a2a/*.
+  async function sendChat() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+
+    addMessage("user", text);
+    chatInput.value = "";
+    chatInput.style.height = "auto";
+    sendBtn.disabled = true;
+    addTyping();
+
+    const body = {
+      jsonrpc: "2.0",
+      id: uuid(),
+      method: "SendMessage",
+      params: {
+        message: {
+          messageId: uuid(),
+          role: "ROLE_USER",
+          parts: [{ text }],
+        },
+        configuration: {},
+      },
+    };
+
+    try {
+      const resp = await fetch(`/a2a/${currentAgent}/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "a2a-version": "1.0" },
+        body: JSON.stringify(body),
+      });
+      const json = await resp.json();
+      removeTyping();
+
+      if (json.error) {
+        addMessage("error", json.error.message || "The agent returned an error.");
+        return;
+      }
+
+      // Backend has changed shape between a bare Message and a completed
+      // Task during development - handle both rather than assume one.
+      const parts = json.result?.message?.parts || json.result?.task?.status?.message?.parts || [];
+      const textPart = parts.find(p => p.text)?.text || "(no response text)";
+      const dataPart = parts.find(p => p.data)?.data;
+      addMessage("assistant", textPart, dataPart);
+    } catch (err) {
+      removeTyping();
+      addMessage("error", "Couldn't reach the agent: " + err.message);
+    } finally {
+      sendBtn.disabled = false;
+    }
+  }
+</script>
+
+</body>
+</html>

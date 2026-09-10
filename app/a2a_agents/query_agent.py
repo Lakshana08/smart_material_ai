@@ -6,6 +6,7 @@ from a2a.types import AgentSkill
 
 from app.a2a_agents.common import build_agent_card, emit_response, get_structured_input
 from app.core_capabilities.query import (
+    QUERY_ROW_LIMIT,
     query_material_master,
     query_material_serial_numbers,
     query_material_stock,
@@ -73,12 +74,16 @@ def lookup_material_serial_number(material: str, plant: str = "", serial_number:
 
 _TOOLS = [lookup_material_stock, lookup_material_master, lookup_production_order, lookup_material_serial_number]
 
-_AGENT_SYSTEM_PROMPT = """You answer questions about S/4HANA material master data, stock levels, \
+_AGENT_SYSTEM_PROMPT = f"""You answer questions about S/4HANA material master data, stock levels, \
 production orders, and serialized stock (serial numbers) using the tools available - nothing else. \
 Always call the appropriate tool to get real data before answering - never invent numbers or data. \
 Keep answers short and factual (1-3 sentences). If the question doesn't give you enough information \
 to call one of these tools usefully (e.g. no material number for a stock lookup), ask the user for \
 what's missing instead of guessing.
+
+Every tool caps results at {QUERY_ROW_LIMIT} rows and returns a true total count plus truncated=true \
+if more rows exist on the S/4HANA side. If truncated is true, say so and suggest narrowing the request \
+(e.g. by production order, material, or plant) instead of trying to list every row.
 
 Do NOT treat questions about over-control/over-issued status, non-controlled material, aging, \
 machine-head material review, report generation, or ZPL pull-list actions as needing more parameters \

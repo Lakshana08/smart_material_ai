@@ -28,12 +28,13 @@ MATERIAL_STOCK = S4Api(
     has_plant_field=False,
 )
 
-# COOIS - production order info. UNRESOLVED: filtering ProductionOrder eq '...'
-# 400s live ("Property ProductionOrder not found") - may need direct key
-# access instead of $filter; check $metadata before trusting this as-is.
+# COOIS - production order info. RESOLVED (confirmed live): the entity's real
+# key field is "ManufacturingOrder", not "ProductionOrder" - that's why
+# filtering by ProductionOrder eq '...' 400'd. Material/Plant are genuine
+# top-level fields here (confirmed live), unlike A_MaterialStock.
 PRODUCTION_ORDER = S4Api(
     path="/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/A_ProductionOrder_2",
-    key_field="ProductionOrder",
+    key_field="ManufacturingOrder",
 )
 
 # MMBE serialized stock - composite key Material+SerialNumber. Unlike
