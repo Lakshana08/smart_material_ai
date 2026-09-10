@@ -70,7 +70,7 @@ def query_production_order(
     """COOIS - production order info, filterable by order/material/plant."""
     filters = []
     if production_order:
-        filters.append(f"ProductionOrder eq '{odata_literal(production_order)}'")
+        filters.append(f"ManufacturingOrder eq '{odata_literal(production_order)}'")
     if material:
         filters.append(f"Material eq '{odata_literal(material)}'")
     if plant:

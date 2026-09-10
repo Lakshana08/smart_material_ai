@@ -21,6 +21,7 @@ http://<host>/a2a/query/.well-known/agent-card.json, etc.
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 # Must run before any gen_ai_hub import: the AI Core SDK reads
 # AICORE_CLIENT_ID/CLIENT_SECRET/AUTH_URL/BASE_URL/RESOURCE_GROUP directly
@@ -39,6 +40,7 @@ from app.a2a_agents.query_agent import QueryAgentExecutor, build_query_agent_car
 from app.a2a_agents.report_agent import ReportAgentExecutor, build_report_agent_card
 from app.a2a_agents.status_agent import StatusAgentExecutor, build_status_agent_card
 from app.core.config import get_settings
+from app.core_capabilities import dashboard as dashboard_capability
 from app.routers.reports import router as reports_router
 
 _AGENTS = {
@@ -78,10 +80,26 @@ def create_app() -> FastAPI:
     def health() -> dict:
         return {"status": "ok"}
 
+    # Plain REST, not A2A - backs the dashboard sidebar's scope filter
+    # (Plant / Storage Location / Material Group) with real, re-computed
+    # counts rather than a decorative dropdown that doesn't do anything.
+    @app.get("/api/dashboard/summary")
+    def dashboard_summary(plant: str | None = None, storage_location: str | None = None, material_group: str | None = None) -> dict:
+        return dashboard_capability.get_summary(plant=plant, storage_location=storage_location, material_group=material_group)
+
+    @app.get("/api/dashboard/scope-options")
+    def dashboard_scope_options() -> dict:
+        return dashboard_capability.get_scope_options()
+
     app.include_router(reports_router)
 
     for path_segment, (build_card, executor_cls) in _AGENTS.items():
         app.mount(f"/a2a/{path_segment}", _build_agent_app(path_segment, build_card, executor_cls))
+
+    # Static frontend (static/index.html) - mounted at "/", so it must be
+    # registered last: Starlette matches mounts in registration order, and a
+    # root-path Mount registered earlier would swallow /health, /a2a/*, etc.
+    app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
     return app
 
