@@ -37,13 +37,28 @@ class S4Client:
     def post(self, path: str, json_body: dict | None = None) -> dict:
         return self._mutate("POST", path, json_body)
 
-    def patch(self, path: str, json_body: dict | None = None) -> dict:
-        return self._mutate("PATCH", path, json_body)
+    def patch(self, path: str, json_body: dict | None = None, extra_headers: dict | None = None) -> dict:
+        return self._mutate("PATCH", path, json_body, extra_headers=extra_headers)
 
-    def delete(self, path: str) -> dict:
-        return self._mutate("DELETE", path, None)
+    def delete(self, path: str, extra_headers: dict | None = None) -> dict:
+        return self._mutate("DELETE", path, None, extra_headers=extra_headers)
 
-    def _mutate(self, method: str, path: str, json_body: dict | None) -> dict:
+    def get_etag(self, path: str) -> str | None:
+        """GETs a keyed entity and returns its ETag, needed for If-Match on a PATCH/DELETE
+        against an entity with optimistic concurrency control (e.g. A_ProductionOrder_2) -
+        unlike A_Product, which exposes no ETag at all. Prefers the HTTP ETag response
+        header; falls back to the OData v2 JSON body's __metadata.etag if that's absent."""
+        resolved = self._resolve()
+        kwargs = self._base_kwargs(resolved)
+        kwargs["headers"]["Accept"] = "application/json"
+        resp = requests.get(self._url(resolved, path), params={"$format": "json"}, **kwargs)
+        self._raise_for_odata_error(resp)
+        etag = resp.headers.get("ETag")
+        if etag:
+            return etag
+        return resp.json().get("d", {}).get("__metadata", {}).get("etag")
+
+    def _mutate(self, method: str, path: str, json_body: dict | None, extra_headers: dict | None = None) -> dict:
         resolved = self._resolve()
         self._ensure_csrf_token(resolved, path)
 
@@ -51,6 +66,8 @@ class S4Client:
             kwargs = self._base_kwargs(resolved)
             kwargs["headers"]["Accept"] = "application/json"
             kwargs["headers"]["X-CSRF-Token"] = self._csrf_token
+            if extra_headers:
+                kwargs["headers"].update(extra_headers)
             kwargs["cookies"] = self._csrf_cookies
             return requests.request(method, self._url(resolved, path), json=json_body, **kwargs)
 

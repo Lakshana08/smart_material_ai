@@ -1,5 +1,6 @@
-"""Report capability: build a downloadable report from any of the three
-S/4 query sources (material master / material stock / production order).
+"""Report capability: build a downloadable report from any of the four
+S/4 query sources (material master / material stock / production order /
+material serial number).
 """
 
 from app.core_capabilities._s4_apis import BY_NAME
