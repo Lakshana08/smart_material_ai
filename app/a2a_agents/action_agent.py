@@ -31,9 +31,10 @@ SKILL = AgentSkill(
         "(T-code CO01/CO02) via SAP's Production Order API (API_PRODUCTION_ORDER_2_SRV, "
         "entity A_ProductionOrder_2): 'create_production_order' (payload.material, "
         "payload.production_plant, payload.manufacturing_order_type, payload.total_quantity, "
-        "payload.mfg_order_planned_end_date - ISO 8601, e.g. '2026-12-01T00:00:00'; optional "
-        "payload.production_version - SAP assigns the order number, so no order_number is "
-        "given for this action) and 'update_production_order' (requires order_number - the "
+        "payload.mfg_order_planned_end_date - ISO 8601, e.g. '2026-12-01T00:00:00', and "
+        "payload.production_version - this system rejects a create with no production version "
+        "at all; SAP assigns the order number, so no order_number is given for this action) "
+        "and 'update_production_order' (requires order_number - the "
         "ManufacturingOrder number - plus at least one of payload.total_quantity or "
         "payload.mfg_order_planned_end_date)."
     ),
@@ -138,14 +139,15 @@ def create_production_order(
     manufacturing_order_type: str,
     total_quantity: str,
     mfg_order_planned_end_date: str,
-    production_version: str | None = None,
+    production_version: str,
 ) -> dict:
     """Create a new production order in S/4HANA (T-code CO01) via the Production Order API
     (API_PRODUCTION_ORDER_2_SRV). material is the material to produce. production_plant is
     the SAP plant code. manufacturing_order_type is the SAP order type code (e.g. 'YBM1').
     total_quantity is the order quantity. mfg_order_planned_end_date is an ISO 8601 datetime
-    string (e.g. '2026-12-01T00:00:00'). production_version is optional. SAP assigns the
-    resulting production order number - it's returned in the result."""
+    string (e.g. '2026-12-01T00:00:00'). production_version is required - this system rejects
+    a create with no production version at all. SAP assigns the resulting production order
+    number - it's returned in the result."""
     payload = {
         "material": material,
         "production_plant": production_plant,

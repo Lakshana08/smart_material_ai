@@ -43,8 +43,8 @@ from app.a2a_agents.query_agent import QueryAgentExecutor, build_query_agent_car
 from app.a2a_agents.report_agent import ReportAgentExecutor, build_report_agent_card
 from app.a2a_agents.status_agent import StatusAgentExecutor, build_status_agent_card
 from app.core.config import get_settings
-from app.core_capabilities import dashboard as dashboard_capability
 from app.routers.reports import router as reports_router
+from frontend import dashboard as dashboard_capability
 
 _AGENTS = {
     "query": (build_query_agent_card, QueryAgentExecutor),
@@ -131,10 +131,13 @@ def create_app() -> FastAPI:
         bare_route = create_jsonrpc_routes(handler, rpc_url=f"/a2a/{path_segment}", enable_v0_3_compat=True)[0]
         app.routes.append(Route(bare_route.path, endpoint=bare_route.endpoint, methods=["POST"]))
 
-    # Static frontend (static/index.html) - mounted at "/", so it must be
-    # registered last: Starlette matches mounts in registration order, and a
-    # root-path Mount registered earlier would swallow /health, /a2a/*, etc.
-    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+    # Frontend UI (frontend/public/index.html), kept in its own top-level
+    # folder separate from the agent code in app/ - only frontend/public/ is
+    # mounted (not all of frontend/), so frontend/dashboard.py's source isn't
+    # served as a static file. Registered last: Starlette matches mounts in
+    # registration order, and a root-path Mount registered earlier would
+    # swallow /health, /a2a/*, etc.
+    app.mount("/", StaticFiles(directory="frontend/public", html=True), name="frontend")
 
     return app
 

@@ -6,15 +6,15 @@
 <title>Smart Material AI</title>
 <style>
   :root{
-    --bg:#f7f1e6;
+    --bg:#ffffff;
     --surface:#ffffff;
-    --surface-2:#f2ead9;
-    --panel-wash: linear-gradient(180deg, #fffdf9 0%, #faf5ec 100%);
-    --ink:#2a2118;
-    --ink-dim:#6b5d4e;
-    --ink-faint:#9c8e7c;
-    --line:#e8dfc9;
-    --line-soft:#f0e8d6;
+    --surface-2:#f4f4f5;
+    --panel-wash: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+    --ink:#1c1c1e;
+    --ink-dim:#63636b;
+    --ink-faint:#96969e;
+    --line:#e4e4e7;
+    --line-soft:#eeeeef;
     --accent:#0a6ed1;
     --accent-dark:#0857a8;
     --accent-ink:#ffffff;
@@ -36,8 +36,8 @@
     --ok:#1f9c7c;
     --warn-bg:var(--chip-amber-bg); --warn-ink:var(--chip-amber-ink);
     --danger:var(--chip-coral-ink); --danger-bg:var(--chip-coral-bg);
-    --shadow-sm: 0 1px 2px rgba(42,33,24,.07);
-    --shadow-md: 0 8px 24px rgba(42,33,24,.10);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
+    --shadow-md: 0 8px 24px rgba(0,0,0,.08);
     --shadow-glow: 0 4px 18px rgba(139,92,246,.28);
     --sidebar-w: 220px;
     --chat-w: 400px;
@@ -47,15 +47,15 @@
 
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
-      --bg:#191420;
-      --surface:#221b29;
-      --surface-2:#2b2333;
-      --panel-wash: linear-gradient(180deg, #241d2c 0%, #191420 100%);
-      --ink:#f2ecf7;
-      --ink-dim:#b6a9c6;
-      --ink-faint:#7d708f;
-      --line:#382e44;
-      --line-soft:#2f2739;
+      --bg:#2b2b2e;
+      --surface:#343437;
+      --surface-2:#3e3e42;
+      --panel-wash: linear-gradient(180deg, #343437 0%, #2b2b2e 100%);
+      --ink:#f7f7f8;
+      --ink-dim:#c9c9ce;
+      --ink-faint:#9d9da3;
+      --line:#4a4a4f;
+      --line-soft:#3f3f43;
       --accent:#4a9cf0;
       --accent-dark:#357fd1;
       --grad-a:#4a7dff; --grad-b:#a374ff; --grad-c:#f06fd9;
@@ -71,15 +71,15 @@
     }
   }
   :root[data-theme="dark"]{
-    --bg:#191420;
-    --surface:#221b29;
-    --surface-2:#2b2333;
-    --panel-wash: linear-gradient(180deg, #241d2c 0%, #191420 100%);
-    --ink:#f2ecf7;
-    --ink-dim:#b6a9c6;
-    --ink-faint:#7d708f;
-    --line:#382e44;
-    --line-soft:#2f2739;
+    --bg:#2b2b2e;
+    --surface:#343437;
+    --surface-2:#3e3e42;
+    --panel-wash: linear-gradient(180deg, #343437 0%, #2b2b2e 100%);
+    --ink:#f7f7f8;
+    --ink-dim:#c9c9ce;
+    --ink-faint:#9d9da3;
+    --line:#4a4a4f;
+    --line-soft:#3f3f43;
     --accent:#4a9cf0;
     --accent-dark:#357fd1;
     --grad-a:#4a7dff; --grad-b:#a374ff; --grad-c:#f06fd9;
@@ -498,6 +498,22 @@
   }
   .download-btn:hover{border-color:var(--grad-b);}
   .download-btn svg{width:13px; height:13px; color:var(--grad-b);}
+  .report-btn{
+    display:inline-flex; align-items:center; gap:7px; align-self:flex-start;
+    background:var(--surface); border:1px solid var(--line); color:var(--ink);
+    font-family:inherit; font-size:12px; font-weight:600; padding:7px 12px;
+    border-radius:10px; box-shadow:var(--shadow-sm); cursor:pointer;
+  }
+  .report-btn:hover{border-color:var(--grad-b);}
+  .report-btn:disabled{opacity:.6; cursor:default;}
+  .report-btn svg{width:13px; height:13px; color:var(--grad-b);}
+  .report-actions{display:inline-flex; align-items:center; gap:6px; align-self:flex-start;}
+  .report-format-select{
+    background:var(--surface); border:1px solid var(--line); color:var(--ink);
+    font-family:inherit; font-size:12px; font-weight:600; padding:7px 8px;
+    border-radius:10px; box-shadow:var(--shadow-sm); cursor:pointer;
+  }
+  .report-format-select:disabled{opacity:.6; cursor:default;}
   .data-toggle{font-size:10.5px; color:var(--grad-b); background:none; border:none; cursor:pointer; padding:2px 3px; font-weight:600; align-self:flex-start;}
   .data-block{
     font-family:ui-monospace,"SF Mono",Consolas,monospace; font-size:10px;
@@ -1002,7 +1018,87 @@
     return null;
   }
 
-  function addMessage(role, text, dataObj) {
+  // Query Agent result shapes don't carry an explicit "query_type" field
+  // (except the count_records tool) - report_type is inferred from which
+  // identifier keys are present, matching query.py's 4 result shapes.
+  function extractReportParams(dataObj) {
+    if (!dataObj) return null;
+    let obj = dataObj;
+    if (Array.isArray(dataObj.tool_results)) {
+      obj = dataObj.tool_results.find(r => r && typeof r === "object" &&
+        ("query_type" in r || "product" in r || "production_order" in r || "serial_number" in r || "material" in r));
+    }
+    if (!obj || typeof obj !== "object") return null;
+
+    if ("query_type" in obj) return { report_type: obj.query_type, identifiers: null, plant: null };
+    if ("product" in obj) return { report_type: "material_master", identifiers: obj.product ? [obj.product] : null, plant: null };
+    if ("production_order" in obj) {
+      return {
+        report_type: "production_order",
+        identifiers: obj.production_order ? [obj.production_order] : (obj.material ? [obj.material] : null),
+        plant: obj.plant || null,
+      };
+    }
+    if ("serial_number" in obj) {
+      return { report_type: "material_serial_number", identifiers: obj.material ? [obj.material] : null, plant: obj.plant || null };
+    }
+    if ("material" in obj) {
+      return { report_type: "material_stock", identifiers: obj.material ? [obj.material] : null, plant: obj.plant || null };
+    }
+    return null;
+  }
+
+  async function generateReportFromQuery(reportParams, btn, formatSelect) {
+    btn.disabled = true;
+    if (formatSelect) formatSelect.disabled = true;
+    const originalLabel = btn.innerHTML;
+    btn.textContent = "Generating…";
+    const reportFormat = formatSelect ? formatSelect.value : "csv";
+
+    const body = {
+      jsonrpc: "2.0",
+      id: uuid(),
+      method: "SendMessage",
+      params: {
+        message: {
+          messageId: uuid(),
+          role: "ROLE_USER",
+          parts: [{ data: {
+            report_type: reportParams.report_type,
+            identifiers: reportParams.identifiers,
+            plant: reportParams.plant,
+            report_format: reportFormat,
+          } }],
+        },
+        configuration: {},
+      },
+    };
+
+    try {
+      const resp = await fetch("/a2a/report/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "a2a-version": "1.0" },
+        body: JSON.stringify(body),
+      });
+      const json = await resp.json();
+      if (json.error) {
+        addMessage("error", json.error.message || "The Report Agent returned an error.");
+        return;
+      }
+      const parts = json.result?.message?.parts || json.result?.task?.status?.message?.parts || [];
+      const textPart = parts.find(p => p.text)?.text || "Report generated.";
+      const dataPart = parts.find(p => p.data)?.data;
+      addMessage("assistant", textPart, dataPart, "report");
+      btn.closest(".report-actions")?.remove();
+    } catch (err) {
+      addMessage("error", "Couldn't generate the report: " + err.message);
+      btn.disabled = false;
+      btn.innerHTML = originalLabel;
+      if (formatSelect) formatSelect.disabled = false;
+    }
+  }
+
+  function addMessage(role, text, dataObj, sourceAgent) {
     emptyState.style.display = "none";
     const msg = document.createElement("div");
     msg.className = "msg " + role;
@@ -1030,6 +1126,32 @@
       link.rel = "noopener";
       link.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg> Download report';
       col.appendChild(link);
+    }
+
+    // Query Agent answers carry the same query_type/identifiers the Report
+    // Agent accepts as report_type/identifiers - offer a one-click way to
+    // turn a query result into a downloadable report instead of having to
+    // re-ask the same thing over in the Report Agent tab.
+    if (role === "assistant" && sourceAgent === "query" && !downloadUrl) {
+      const reportParams = extractReportParams(dataObj);
+      if (reportParams) {
+        const actions = document.createElement("div");
+        actions.className = "report-actions";
+
+        const formatSelect = document.createElement("select");
+        formatSelect.className = "report-format-select";
+        formatSelect.innerHTML = '<option value="csv">CSV</option><option value="xlsx">Excel</option><option value="pdf">PDF</option>';
+
+        const reportBtn = document.createElement("button");
+        reportBtn.type = "button";
+        reportBtn.className = "report-btn";
+        reportBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg> Generate report';
+        reportBtn.addEventListener("click", () => generateReportFromQuery(reportParams, reportBtn, formatSelect));
+
+        actions.appendChild(formatSelect);
+        actions.appendChild(reportBtn);
+        col.appendChild(actions);
+      }
     }
 
     if (dataObj) {
@@ -1072,6 +1194,7 @@
   async function sendChat() {
     const text = chatInput.value.trim();
     if (!text) return;
+    const agentForThisMessage = currentAgent;
 
     addMessage("user", text);
     chatInput.value = "";
@@ -1094,7 +1217,7 @@
     };
 
     try {
-      const resp = await fetch(`/a2a/${currentAgent}/`, {
+      const resp = await fetch(`/a2a/${agentForThisMessage}/`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "a2a-version": "1.0" },
         body: JSON.stringify(body),
@@ -1112,7 +1235,7 @@
       const parts = json.result?.message?.parts || json.result?.task?.status?.message?.parts || [];
       const textPart = parts.find(p => p.text)?.text || "(no response text)";
       const dataPart = parts.find(p => p.data)?.data;
-      addMessage("assistant", textPart, dataPart);
+      addMessage("assistant", textPart, dataPart, agentForThisMessage);
     } catch (err) {
       removeTyping();
       addMessage("error", "Couldn't reach the agent: " + err.message);

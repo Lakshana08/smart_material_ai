@@ -2,6 +2,7 @@
 MMBE (stock, and serialized stock), COOIS (production order info)."""
 
 from app.core_capabilities._s4_apis import (
+    BY_NAME,
     MATERIAL_SERIAL_NUMBER,
     MATERIAL_STOCK,
     PRODUCTION_ORDER,
@@ -145,3 +146,21 @@ def query_material_serial_numbers(
         "count": count,
         "truncated": truncated,
     }
+
+
+def count_all_records(query_type: str) -> dict:
+    """Total record count for a query source, with no filter at all - answers
+    "how many X are there in total" for any of the 4 sources. Uses
+    $inlinecount=allpages with $top=1 so S/4 computes the real total without
+    this actually pulling back the full dataset."""
+    if query_type not in BY_NAME:
+        raise ValueError(f"Unknown query_type '{query_type}', expected one of {sorted(BY_NAME)}")
+    api = BY_NAME[query_type]
+    data = get_s4_client().get(api.path, params={"$top": 1, "$inlinecount": "allpages"})
+    count = extract_count(data)
+    if count is None:
+        # Server didn't return an inline count (shouldn't happen given
+        # $inlinecount=allpages, but fall back to counting returned rows
+        # rather than reporting an unknown total).
+        count = len(extract_rows(data))
+    return {"query_type": query_type, "count": count}

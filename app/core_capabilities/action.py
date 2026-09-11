@@ -42,6 +42,17 @@ ETag being exposed, add headers={"If-Match": "*"} to the mutate call.
   docs mark mandatory for creation. Only external material number assignment
   is supported (material_number is required) - internal number ranges
   (omitting Product) are not handled here.
+
+- "delete_description" -> DELETE A_ProductDescription(Product='<material>',
+  Language='<lang>'). Confirmed live (2026-09-11): the same "a product needs
+  at least one description" rule from create_material applies here too -
+  deleting a product's only remaining description is rejected with
+  "PMD_MSG/032 - Description of product '<material>' not maintained" even
+  though the entity demonstrably still exists (GET on the exact same key
+  succeeds right up until the DELETE). The error text is misleading - it
+  isn't that nothing is maintained, it's that deleting it would leave zero
+  descriptions. Add a second language's description first if you need to
+  remove the only existing one.
 """
 
 from app.services.odata_utils import odata_literal
@@ -180,6 +191,10 @@ def perform_production_order_action(order_number: str | None, action: str, paylo
     Unlike A_Product, this entity has real optimistic concurrency control
     (an ETag) - a PATCH without a matching If-Match header is rejected, so
     update_production_order fetches the current ETag live before patching.
+
+    Confirmed live (2026-09-11): payload.production_version is NOT optional
+    despite an earlier assumption here - a create with no ProductionVersion
+    at all is rejected outright with "C2/144 - Specify production version".
     """
     payload = payload or {}
     client = get_s4_client()
@@ -190,12 +205,21 @@ def perform_production_order_action(order_number: str | None, action: str, paylo
         order_type = payload.get("manufacturing_order_type")
         total_quantity = payload.get("total_quantity")
         planned_end_date = payload.get("mfg_order_planned_end_date")
-        if not material or not production_plant or not order_type or not total_quantity or not planned_end_date:
+        production_version = payload.get("production_version")
+        if (
+            not material
+            or not production_plant
+            or not order_type
+            or not total_quantity
+            or not planned_end_date
+            or not production_version
+        ):
             raise ValueError(
                 "create_production_order requires payload.material, payload.production_plant, "
-                "payload.manufacturing_order_type, payload.total_quantity, and "
-                "payload.mfg_order_planned_end_date (ISO 8601, e.g. '2026-12-01T00:00:00'); "
-                "payload.production_version is optional"
+                "payload.manufacturing_order_type, payload.total_quantity, "
+                "payload.mfg_order_planned_end_date (ISO 8601, e.g. '2026-12-01T00:00:00'), and "
+                "payload.production_version - this system rejects a create with no production "
+                "version at all ('C2/144 - Specify production version')"
             )
 
         body = {
@@ -204,10 +228,8 @@ def perform_production_order_action(order_number: str | None, action: str, paylo
             "ManufacturingOrderType": order_type,
             "TotalQuantity": total_quantity,
             "MfgOrderPlannedEndDate": planned_end_date,
+            "ProductionVersion": production_version,
         }
-        production_version = payload.get("production_version")
-        if production_version:
-            body["ProductionVersion"] = production_version
 
         result = client.post(_PRODUCTION_ORDER_PATH, json_body=body)
         created_order = result.get("d", {}).get("ManufacturingOrder")
