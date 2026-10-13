@@ -58,11 +58,63 @@ SKILL = AgentSkill(
 _LLM_ROW_LIMIT = 20
 
 
+_REPORT_TYPE_LABELS = {
+    "material_master": "material master",
+    "material_stock": "material stock",
+    "production_order": "production order",
+    "material_serial_number": "material serial number",
+}
+
+
+def _add_report_prompts(result: dict) -> dict:
+    """Pre-computes the exact free-text prompts a caller would send to the
+    Report Agent to turn this result into a downloadable file, as plain
+    strings - e.g. report_prompt_csv = "Generate a material stock report for
+    TG20 in CSV format". Mirrors the frontend's extractReportParams() JS
+    logic, done once here in Python (simple, deterministic, testable)
+    instead of in a Joule capability's SpEL, which confirmed live cannot
+    reliably evaluate branching logic beyond a single flat property lookup -
+    every attempt at nested ternaries there either silently returned null or
+    crashed the rest of the action group. A consumer like a Joule button
+    only ever needs a plain property reference to these fields now, no
+    conditional logic of its own."""
+    if "query_type" in result:
+        report_type = result["query_type"]
+        identifier = None
+    elif "product" in result:
+        report_type = "material_master"
+        identifier = result.get("product")
+    elif "production_order" in result:
+        report_type = "production_order"
+        identifier = result.get("production_order") or result.get("material")
+    elif "serial_number" in result:
+        report_type = "material_serial_number"
+        identifier = result.get("material")
+    elif "material" in result:
+        report_type = "material_stock"
+        identifier = result.get("material")
+    else:
+        report_type = None
+        identifier = None
+
+    label = _REPORT_TYPE_LABELS.get(report_type)
+    base = f"Generate a {label} report" if label else "Generate a report"
+    if identifier:
+        base += f" for {identifier}"
+
+    return {
+        **result,
+        "report_prompt_csv": f"{base} in CSV format",
+        "report_prompt_excel": f"{base} in Excel format",
+        "report_prompt_pdf": f"{base} in PDF format",
+    }
+
+
 def _for_llm(result: dict) -> dict:
     rows = result.get("results")
     if isinstance(rows, list) and len(rows) > _LLM_ROW_LIMIT:
         result = {**result, "results": rows[:_LLM_ROW_LIMIT], "truncated": True}
-    return humanize_odata_dates(result)
+    return _add_report_prompts(humanize_odata_dates(result))
 
 
 @tool
@@ -104,7 +156,7 @@ def count_records(query_type: str) -> dict:
     material/product/order. query_type is one of 'material_master', 'material_stock',
     'production_order', 'material_serial_number'. Do not use the lookup_* tools for this - those
     require a specific identifier and only return up to the row cap, not a true total."""
-    return count_all_records(query_type=query_type)
+    return _add_report_prompts(count_all_records(query_type=query_type))
 
 
 _TOOLS = [

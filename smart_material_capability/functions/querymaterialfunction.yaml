@@ -20,3 +20,26 @@ action_groups:
         message:
           type: text
           content: "<? replyText ?>"
+      # query_agent.py's _add_report_prompts() pre-computes the exact 3
+      # button prompts (report_prompt_csv/excel/pdf) as plain strings on
+      # the Python side - confirmed live that this Joule SpEL engine cannot
+      # reliably evaluate nested branching logic (every attempt at deriving
+      # report type/identifier here via ternaries either silently returned
+      # null or crashed the rest of the action group), but plain single-
+      # level property access has always worked. So this only ever does a
+      # trivial property lookup, no conditional logic of its own.
+      - type: message
+        message:
+          type: buttons
+          content:
+            title: Want a downloadable report of this?
+            buttons:
+              - type: postback
+                title: CSV
+                value: "<? agentResult.body.status.message.parts.size() > 1 ? agentResult.body.status.message.parts[1].data.tool_results[0].report_prompt_csv : 'Generate a report in CSV format' ?>"
+              - type: postback
+                title: Excel
+                value: "<? agentResult.body.status.message.parts.size() > 1 ? agentResult.body.status.message.parts[1].data.tool_results[0].report_prompt_excel : 'Generate a report in Excel format' ?>"
+              - type: postback
+                title: PDF
+                value: "<? agentResult.body.status.message.parts.size() > 1 ? agentResult.body.status.message.parts[1].data.tool_results[0].report_prompt_pdf : 'Generate a report in PDF format' ?>"
