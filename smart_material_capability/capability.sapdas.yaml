@@ -1,4 +1,4 @@
-schema_version: 3.27.0
+schema_version: 3.28.0
 metadata:
   namespace: joule.ext
   name: smart_material_capability
